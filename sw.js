@@ -1,4 +1,4 @@
-const CACHE = 'fishhawker-v1';
+const CACHE = 'fishhawker-v2';
 const PRECACHE = [
   '/',
   '/index.html',
