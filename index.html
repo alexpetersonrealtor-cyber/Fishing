@@ -523,11 +523,13 @@ document.getElementById('gpsBtn').addEventListener('click', () => {
   btn.disabled = true;
   getGPS(async (lat, lon) => {
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=14`, { headers:{'User-Agent':'ContourFishingApp/1.0'} });
       const data = await res.json();
-      const label = data.address
-        ? [data.address.lake||data.address.reservoir||data.address.city||data.address.town||data.address.village||data.address.county, data.address.state].filter(Boolean).join(', ')
-        : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      const a = data.address || {};
+      const label = [
+        a.lake||a.reservoir||a.water||a.natural||a.leisure||a.city||a.town||a.village||a.county,
+        a.state
+      ].filter(Boolean).join(', ') || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
       document.getElementById('locInput').value = label;
       // Fetch weather directly by coords
       const weather = await fetchWeather(lat, lon);
@@ -585,10 +587,32 @@ function moonPhase(date){
 //  GEOCODE + WEATHER
 // ============================================================
 async function geocode(query){
+  // Nominatim (OSM) first — knows lakes, quarries, parks, rivers, local water bodies
+  try {
+    const nmUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`;
+    const nmRes = await fetch(nmUrl, { headers:{ 'User-Agent':'ContourFishingApp/1.0' } });
+    if(nmRes.ok){
+      const nmData = await nmRes.json();
+      // Prefer water features; fall back to first result
+      const water = nmData.find(r => /lake|water|reservoir|pond|quarry|river|stream|bay|cove/i.test(r.type+' '+r.class+' '+(r.display_name||'')));
+      const r = water || nmData[0];
+      if(r){
+        const addr = r.address || {};
+        const label = [
+          r.name || addr.water || addr.lake || addr.natural,
+          addr.county || addr.city || addr.town || addr.village || addr.state_district,
+          addr.state,
+        ].filter(Boolean).join(', ');
+        return { lat: parseFloat(r.lat), lon: parseFloat(r.lon), label: label || r.display_name };
+      }
+    }
+  } catch(e){ /* fall through to Open-Meteo */ }
+
+  // Open-Meteo geocoder fallback — good for city names and zip codes
   const url=`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
   const res=await fetch(url); if(!res.ok) throw new Error('geocode failed');
   const data=await res.json();
-  if(!data.results||!data.results.length) throw new Error('no match');
+  if(!data.results||!data.results.length) throw new Error(`Can't find "${query}" — try adding a city or state, e.g. "Deep Quarry Lake, Bartlett IL"`);
   const r=data.results[0];
   return { lat:r.latitude, lon:r.longitude, label:[r.name,r.admin1,r.country_code].filter(Boolean).join(', ') };
 }
