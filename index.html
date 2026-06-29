@@ -90,6 +90,10 @@
   .species-toggle button.active{background:var(--moss);color:var(--mist);border-color:var(--moss);}
 
   .location-result{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--mist-dim);margin-top:8px;min-height:14px;}
+  .trip-mode-row{display:flex;gap:6px;margin-top:10px;}
+  .trip-mode-btn{flex:1;padding:9px 0;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--mist-dim);font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;cursor:pointer;transition:all 0.15s;}
+  .trip-mode-btn.active{background:var(--teal);color:#122C2E;border-color:var(--teal);}
+
   .trip-planner-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;}
   .trip-planner-label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist-dim);letter-spacing:0.08em;white-space:nowrap;}
   .trip-planner-row input[type="date"],.trip-planner-row input[type="time"]{background:var(--surface-2);border:1px solid var(--line);color:var(--mist);padding:6px 8px;border-radius:8px;font-size:13px;font-family:'Inter',sans-serif;color-scheme:dark;}
@@ -319,6 +323,12 @@
         <button id="btnSalmon">Salmon</button>
         <button id="btnTrout">Trout</button>
       </div>
+
+      <!-- Boat / Shore mode selector -->
+      <div class="trip-mode-row">
+        <button class="trip-mode-btn active" id="modeShorBtn">🏕 Shore</button>
+        <button class="trip-mode-btn" id="modeBoatBtn">🚤 Boat</button>
+      </div>
     </div>
 
     <div id="statusArea"></div>
@@ -375,14 +385,8 @@
         </div>
       </details>
 
-      <!-- Boat mode toggle lives here so it appears once weather loads -->
-      <div class="boat-toggle">
-        <label for="boatModeToggle">🚤 Boat Mode — get a GPS waypoint for open water</label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="boatModeToggle" />
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
+      <!-- hidden checkbox keeps existing boat toggle logic intact -->
+      <input type="checkbox" id="boatModeToggle" style="display:none;" />
     </div>
 
     <!-- Boat mode panel -->
@@ -603,7 +607,7 @@
 // ============================================================
 //  STATE
 // ============================================================
-let state = { species:'bass', coords:null, weather:null, manualWaterTemp:null, tripTarget:null };
+let state = { species:'bass', coords:null, weather:null, manualWaterTemp:null, tripTarget:null, mode:'shore' };
 let spots = [];
 let trips = [];
 let editingSpotId = null;
@@ -671,6 +675,43 @@ function setSpecies(sp, save=true){
   if(state.weather) renderScore();
 }
 Object.entries(speciesBtns).forEach(([sp,btn])=>btn.addEventListener('click',()=>setSpecies(sp)));
+
+// ============================================================
+//  BOAT / SHORE MODE
+// ============================================================
+function setMode(mode){
+  state.mode = mode;
+  document.getElementById('modeShorBtn').classList.toggle('active', mode==='shore');
+  document.getElementById('modeBoatBtn').classList.toggle('active', mode==='boat');
+
+  // Sync hidden checkbox so existing boat-panel logic still works
+  const chk = document.getElementById('boatModeToggle');
+  if(chk.checked !== (mode==='boat')){
+    chk.checked = (mode==='boat');
+    chk.dispatchEvent(new Event('change'));
+  }
+
+  applyModeVisibility();
+  if(state.weather) renderScore();
+}
+
+function applyModeVisibility(){
+  const isBoat = state.mode === 'boat';
+  // Shore-only panels
+  document.getElementById('structurePanel').dataset.modeHide = isBoat ? 'boat' : '';
+  // Boat-only panels
+  document.getElementById('boatPanel').dataset.modeHide = isBoat ? '' : 'shore';
+
+  // Show/hide immediately based on whether they already have content
+  if(isBoat){
+    if(document.getElementById('structurePanel').style.display !== 'none')
+      document.getElementById('structurePanel').style.display = 'none';
+  }
+  // boatPanel show/hide is managed by the existing checkbox handler
+}
+
+document.getElementById('modeShorBtn').addEventListener('click', ()=>setMode('shore'));
+document.getElementById('modeBoatBtn').addEventListener('click', ()=>setMode('boat'));
 
 // ============================================================
 //  STATUS
@@ -1682,7 +1723,7 @@ function openStructureMap(structId, structName, lookFor){
 function renderStructureGuide(ctx){
   const panel = document.getElementById('structurePanel');
   const list  = document.getElementById('structureList');
-  if(!ctx){ panel.style.display='none'; return; }
+  if(!ctx || state.mode==='boat'){ panel.style.display='none'; return; }
   const ranked = rankStructures({...ctx, species: state.species});
   const top = ranked.slice(0,5);
   panel.style.display='block';
@@ -1722,14 +1763,18 @@ function renderDepthTarget(ctx){
   const tickPct  = fillPct(dt.primaryFt);
 
   const speciesLabel = {bass:'Bass',walleye:'Walleye',salmon:'Salmon',trout:'Trout'}[state.species]||state.species;
-  const thermoclineTag = dt.thermoclineDepthFt
+  const isBoat = state.mode === 'boat';
+  const cardTitle = isBoat
+    ? `🚤 ${speciesLabel} Depth Target — Open Water`
+    : `🏕 ${speciesLabel} Depth Target — Shore`;
+  const thermoclineTag = (isBoat && dt.thermoclineDepthFt)
     ? `<span class="thermocline-tag">🌡 Thermocline est. ${dt.thermoclineDepthFt} ft</span>`
-    : `<span class="thermocline-tag">🌡 No thermocline — water well-mixed</span>`;
+    : (isBoat ? `<span class="thermocline-tag">🌡 No thermocline — water well-mixed</span>` : '');
 
   panel.style.display='block';
   panel.innerHTML=`<div class="depth-card">
     <div class="depth-card-header">
-      <div class="depth-card-title">🎯 ${speciesLabel} Depth Target</div>
+      <div class="depth-card-title">${cardTitle}</div>
       <div><span class="depth-card-primary">${dt.primaryFt}</span><span class="depth-card-unit">ft</span></div>
     </div>
     <div style="font-size:12px;color:var(--mist-dim);margin-bottom:6px;">Range: <strong style="color:var(--mist);">${dt.minFt}–${dt.maxFt} ft</strong></div>
@@ -1803,7 +1848,7 @@ function renderScore(){
 function renderConditionSpots(ctx, base){
   const panel=document.getElementById('conditionSpotsPanel');
   const list=document.getElementById('conditionSpotsList');
-  if(!spots.length){ panel.style.display='none'; return; }
+  if(!spots.length || state.mode==='boat'){ panel.style.display='none'; return; }
   const sp=state.species;
   const scored=spots
     .filter(s=>!s.species||!s.species.length||s.species.includes(sp))
