@@ -113,6 +113,22 @@
   .depth-method{font-size:12px;color:var(--mist);line-height:1.55;margin-top:6px;padding:8px 10px;background:var(--surface-2);border-radius:8px;border-left:3px solid var(--teal);}
   .thermocline-tag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--surface-2);border:1px solid var(--teal);color:var(--teal);border-radius:6px;padding:2px 7px;margin-top:6px;}
 
+  /* Depth tiers */
+  .depth-tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0 4px;}
+  .depth-tier{border-radius:10px;padding:8px 6px;text-align:center;border:1px solid var(--line);}
+  .depth-tier.good  {background:rgba(90,102,64,0.25);border-color:var(--moss-dim);}
+  .depth-tier.better{background:rgba(224,165,61,0.15);border-color:rgba(224,165,61,0.5);}
+  .depth-tier.best  {background:rgba(224,165,61,0.28);border-color:var(--amber);}
+  .tier-label{font-family:'IBM Plex Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mist-dim);margin-bottom:3px;}
+  .tier-label.good  {color:var(--moss);}
+  .tier-label.better{color:var(--amber);opacity:0.8;}
+  .tier-label.best  {color:var(--amber);}
+  .tier-depth{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--mist);line-height:1.1;}
+  .depth-search{background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--moss);border-radius:8px;padding:10px 12px;margin-top:8px;}
+  .depth-search-title{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--moss);margin-bottom:6px;}
+  .depth-search ol{margin:0;padding-left:18px;font-size:12px;color:var(--mist-dim);line-height:1.8;}
+  .depth-adjust-note{font-size:11px;color:var(--mist-dim);margin-top:6px;font-style:italic;line-height:1.5;}
+
   /* meter */
   .meter-panel{display:flex;flex-direction:column;align-items:center;padding:22px 16px 10px;}
   .meter-wrap{position:relative;width:220px;height:220px;}
@@ -1057,7 +1073,9 @@ function estWaterTemp(w){
 }
 
 // ─── Specific depth + thermocline recommendation ───────────────────────────
-function calcDepthTarget(species, waterTempF, windMph, pressureSlope, now, w){
+// moon: {phase, illum, activity, name} from moonPhase()
+// currentMph: Ekman-estimated surface current speed (or 0)
+function calcDepthTarget(species, waterTempF, windMph, pressureSlope, now, w, moon, currentMph){
   const month = now.getMonth()+1;
   const hour  = now.getHours();
 
@@ -1235,12 +1253,77 @@ function calcDepthTarget(species, waterTempF, windMph, pressureSlope, now, w){
     }
   }
 
-  // Clamp to sensible ranges
+  // ── Moon phase adjustment ─────────────────────────────────────────────────
+  // High lunar activity (full/new moon) tends to pull fish shallower during solunar windows
+  // Quarter moon = fish hold tighter to structure, normal to slightly deeper
+  let moonShiftFt = 0;
+  let moonNote = '';
+  if(moon){
+    if(moon.activity > 0.85){
+      moonShiftFt = -Math.round((maxFt - minFt) * 0.12); // ~10-15% shallower
+      moonNote = `${moon.name} — fish trending shallower during this strong lunar window.`;
+    } else if(moon.activity < 0.2){
+      moonShiftFt = Math.round((maxFt - minFt) * 0.08); // ~8% deeper
+      moonNote = `${moon.name} — quarter moon; fish holding tighter to structure and slightly deeper.`;
+    }
+  }
+  // ── Current adjustment ────────────────────────────────────────────────────
+  // Surface current (Ekman transport) pushes thermocline fish shallower on the upwelling side
+  // and creates depth bands where baitfish concentrate
+  let currentNote = '';
+  const cur = currentMph || 0;
+  let currentShiftFt = 0;
+  if(cur > 0.15 && thermoclineDepthFt){
+    currentShiftFt = -2; // current upwelling compresses fish 1-3 ft shallower
+    currentNote = `Est. ${cur.toFixed(2)} mph surface current — baitfish and target species compress slightly shallower on the upwelling side.`;
+  } else if(cur > 0.05 && thermoclineDepthFt){
+    currentNote = `Light surface current (${cur.toFixed(2)} mph) — fish may orient on current breaks at the thermocline edge.`;
+  }
+
+  const totalShiftFt = moonShiftFt + currentShiftFt;
+
+  // ── Clamp to sensible ranges ──────────────────────────────────────────────
   minFt = Math.max(1, Math.round(minFt));
   maxFt = Math.max(minFt+3, Math.round(maxFt));
   primaryFt = Math.round(Math.max(minFt, Math.min(maxFt, primaryFt)));
 
-  return { minFt, maxFt, primaryFt, reasoning, method, thermoclineDepthFt };
+  // Apply adjustments to primary (tiers will be built around adjusted primary)
+  const adjPrimary = Math.max(minFt, Math.min(maxFt, primaryFt + totalShiftFt));
+
+  // ── Good / Better / Best tiers ────────────────────────────────────────────
+  const range = maxFt - minFt;
+  const tiers = [
+    { label:'Good',   minFt,                          maxFt,                          note:'Full productive range — you will find fish somewhere in here.' },
+    { label:'Better', minFt: Math.round(minFt + range*0.25), maxFt: Math.round(maxFt - range*0.20), note:'Higher-confidence window based on temp and conditions.' },
+    { label:'Best',   minFt: Math.max(1, adjPrimary-2), maxFt: adjPrimary+3,          note:'Sweet spot — all data points converge here.' },
+  ];
+
+  // ── Search-down protocol (trolling species) ────────────────────────────────
+  const isTrolling = ['salmon','steelhead','trout','walleye'].includes(species);
+  let searchProtocol = null;
+  if(isTrolling){
+    const steps = [];
+    if(tiers[2].minFt > 10){
+      // Offshore: start at Good top, drop toward Best
+      const start = tiers[0].maxFt;
+      const mid   = Math.round((tiers[0].maxFt + adjPrimary) / 2);
+      const prime = adjPrimary;
+      steps.push(`Start at ${start} ft — set lines and troll 15 min.`);
+      steps.push(`No strikes → drop to ${mid} ft, troll another 15 min.`);
+      steps.push(`No strikes → drop to ${prime} ft (prime zone) — mark fish on sonar before committing.`);
+      if(adjPrimary > 15) steps.push(`Still slow → check every 5 ft below ${prime} ft down to ${Math.min(maxFt+10, prime+20)} ft.`);
+    } else {
+      // Shallow run (steelhead nearshore, etc.)
+      steps.push(`Start at ${minFt} ft — work the current seam close in.`);
+      steps.push(`No strikes → fan out to ${Math.round((minFt+maxFt)/2)} ft.`);
+      steps.push(`No strikes → move to ${maxFt} ft and vary retrieve depth in the column.`);
+    }
+    searchProtocol = steps;
+  }
+
+  const adjustmentNotes = [moonNote, currentNote].filter(Boolean);
+
+  return { minFt, maxFt, primaryFt: adjPrimary, reasoning, method, thermoclineDepthFt, tiers, searchProtocol, adjustmentNotes };
 }
 
 // ============================================================
@@ -1987,8 +2070,13 @@ function renderDepthTarget(ctx){
   const panel = document.getElementById('depthPanel');
   if(!ctx || !state.weather){ panel.style.display='none'; return; }
 
-  const dt = calcDepthTarget(state.species, ctx.waterTemp, ctx.windMph, ctx.pressureSlope, ctx.now, state.weather);
-  const maxScale = 60; // bar represents 0–60 ft
+  const moon = moonPhase(ctx.now);
+  const curMph = (window.boatState?.buoyObs?.length)
+    ? estimateCurrent(ctx.windMph, state.weather?.current?.wind_direction_10m||0).mph
+    : 0;
+  const dt = calcDepthTarget(state.species, ctx.waterTemp, ctx.windMph, ctx.pressureSlope, ctx.now, state.weather, moon, curMph);
+
+  const maxScale = Math.max(60, dt.maxFt + 10); // scale bar to at least 60 ft
   const fillPct  = pct => Math.min(100, (pct/maxScale)*100).toFixed(1);
   const minPct   = fillPct(dt.minFt);
   const widthPct = (Math.min(maxScale,dt.maxFt) - Math.min(maxScale,dt.minFt))/maxScale*100;
@@ -2003,21 +2091,38 @@ function renderDepthTarget(ctx){
     ? `<span class="thermocline-tag">🌡 Thermocline est. ${dt.thermoclineDepthFt} ft</span>`
     : (isBoat ? `<span class="thermocline-tag">🌡 No thermocline — water well-mixed</span>` : '');
 
+  const tiersHtml = `<div class="depth-tiers">${dt.tiers.map(t=>`
+    <div class="depth-tier ${t.label.toLowerCase()}">
+      <div class="tier-label ${t.label.toLowerCase()}">${t.label}</div>
+      <div class="tier-depth">${t.minFt}–${t.maxFt}<span style="font-size:11px;font-weight:400;color:var(--mist-dim);"> ft</span></div>
+    </div>`).join('')}</div>`;
+
+  const searchHtml = dt.searchProtocol ? `
+    <div class="depth-search">
+      <div class="depth-search-title">🔍 Search-Down Protocol</div>
+      <ol>${dt.searchProtocol.map(s=>`<li>${s}</li>`).join('')}</ol>
+    </div>` : '';
+
+  const adjustHtml = dt.adjustmentNotes.length ? `
+    <div class="depth-adjust-note">⚡ ${dt.adjustmentNotes.join(' ')}</div>` : '';
+
   panel.style.display='block';
   panel.innerHTML=`<div class="depth-card">
     <div class="depth-card-header">
       <div class="depth-card-title">${cardTitle}</div>
       <div><span class="depth-card-primary">${dt.primaryFt}</span><span class="depth-card-unit">ft</span></div>
     </div>
-    <div style="font-size:12px;color:var(--mist-dim);margin-bottom:6px;">Range: <strong style="color:var(--mist);">${dt.minFt}–${dt.maxFt} ft</strong></div>
-    <div class="depth-bar-wrap">
+    ${tiersHtml}
+    <div class="depth-bar-wrap" style="margin-top:6px;">
       <div class="depth-bar-fill" style="left:${minPct}%;width:${widthPct.toFixed(1)}%;"></div>
       <div class="depth-bar-tick" style="left:${tickPct}%;"></div>
     </div>
-    <div class="depth-bar-labels"><span>0 ft</span><span>30 ft</span><span>60 ft</span></div>
+    <div class="depth-bar-labels"><span>0 ft</span><span>${Math.round(maxScale/2)} ft</span><span>${maxScale} ft</span></div>
     ${thermoclineTag}
+    ${adjustHtml}
     <div class="depth-reasoning">${dt.reasoning}</div>
     <div class="depth-method">🎣 ${dt.method}</div>
+    ${searchHtml}
   </div>`;
 }
 
@@ -2800,7 +2905,10 @@ function computeWaypoint() {
   const sp = state.species;
 
   // Use the same calcDepthTarget that powers the depth card so both agree
-  const _dt = calcDepthTarget(sp, waterTemp, w.current.wind_speed_10m, 0, new Date(w.current.time), w);
+  const _now = new Date(w.current.time);
+  const _moon = moonPhase(_now);
+  const _cur = estimateCurrent(w.current.wind_speed_10m, w.current.wind_direction_10m||0).mph;
+  const _dt = calcDepthTarget(sp, waterTemp, w.current.wind_speed_10m, 0, _now, w, _moon, _cur);
   const trollSpeedBySpecies = { salmon:'2–3 mph', steelhead:'2–2.5 mph', trout:'2–2.5 mph', walleye:'1.2–1.8 mph', largemouth:'casting', smallmouth:'casting', muskie:'2.5–4 mph', perch:'0.8–1.2 mph' };
   const depth = {
     minFt: _dt.minFt,
