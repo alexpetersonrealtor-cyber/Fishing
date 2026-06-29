@@ -167,6 +167,17 @@
   .species-chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 7px;border-radius:5px;background:var(--moss-dim);color:var(--mist);}
   .spot-why{font-size:13px;color:var(--mist-dim);line-height:1.5;}
   .spot-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center;}
+  .spot-card{cursor:pointer;}
+  .spot-card .spot-actions button,.spot-card .spot-actions a{cursor:pointer;}
+  .spot-expand-hint{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.05em;color:var(--mist-dim);margin-top:2px;}
+  .spot-outlook{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;}
+  .spot-outlook-loading{font-size:12px;color:var(--mist-dim);font-family:'IBM Plex Mono',monospace;}
+  .outlook-table{width:100%;border-collapse:collapse;font-size:11px;}
+  .outlook-table th{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.04em;color:var(--mist-dim);text-align:center;padding:4px 2px;font-weight:600;}
+  .outlook-table th:first-child{text-align:left;}
+  .outlook-table td{text-align:center;padding:4px 2px;}
+  .outlook-table td:first-child{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist);white-space:nowrap;padding-right:6px;}
+  .outlook-pill{display:inline-block;min-width:30px;padding:3px 5px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:11px;color:#1a1410;}
   .spot-score{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:var(--amber);}
 
   .log-entry{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;}
@@ -3174,9 +3185,11 @@ function renderSpotsList(){
     const mapLink=spot.lat&&spot.lon
       ?`<a href="https://maps.google.com/?q=${spot.lat},${spot.lon}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:12px;padding:6px 10px;text-decoration:none;">🗺 Map</a>`:'';
     const fishBtn=spot.lake
-      ?`<button class="btn-teal" style="font-size:12px;padding:6px 10px;" onclick="fishThisSpot('${esc(spot.lake)}')">⚡ Forecast</button>`:'';
+      ?`<button class="btn-teal" style="font-size:12px;padding:6px 10px;" onclick="event.stopPropagation();fishThisSpot('${esc(spot.lake)}')">⚡ Forecast</button>`:'';
+    const canOutlook = spot.lat && spot.lon && spot.species && spot.species.length;
+    const expanded = _expandedSpotId === spot.id;
     return `
-    <div class="spot-card">
+    <div class="spot-card" onclick="toggleSpotOutlook('${spot.id}')">
       <div class="spot-header">
         <div><div class="spot-name">${esc(spot.name)}</div>${spot.lake?`<div style="font-size:12px;color:var(--mist-dim);margin-top:2px;">${esc(spot.lake)}</div>`:''}</div>
       </div>
@@ -3187,13 +3200,74 @@ function renderSpotsList(){
         ${spot.lat&&spot.lon?`<span>🧭 ${Number(spot.lat).toFixed(4)}, ${Number(spot.lon).toFixed(4)}</span>`:''}
       </div>
       ${spot.notes?`<div class="spot-why">${esc(spot.notes)}</div>`:''}
-      <div class="spot-actions">
+      ${canOutlook?`<div class="spot-expand-hint">${expanded?'▲ hide 5-day outlook':'▼ tap for 5-day outlook'}</div>`:''}
+      <div class="spot-actions" onclick="event.stopPropagation()">
         ${fishBtn}${mapLink}
         <button class="btn-ghost" onclick="editSpot('${spot.id}')">Edit</button>
         <button class="btn-danger" onclick="deleteSpot('${spot.id}')">Delete</button>
       </div>
+      ${expanded?`<div class="spot-outlook" id="outlook-${spot.id}"><div class="spot-outlook-loading">Loading 5-day outlook…</div></div>`:''}
     </div>`;
   }).join('');
+  if(_expandedSpotId){
+    const spot = spots.find(s=>s.id===_expandedSpotId);
+    if(spot) loadSpotOutlook(spot);
+  }
+}
+
+// ---- Per-spot 5-day / per-species outlook ----
+let _expandedSpotId = null;
+const _spotOutlookCache = {}; // spotId -> {ts, html}
+const SPOT_OUTLOOK_TTL_MS = 60 * 60 * 1000;
+
+function toggleSpotOutlook(spotId){
+  const spot = spots.find(s=>s.id===spotId);
+  if(!spot || !spot.lat || !spot.lon || !spot.species || !spot.species.length) return;
+  _expandedSpotId = (_expandedSpotId === spotId) ? null : spotId;
+  renderSpotsList();
+}
+
+const SPECIES_LABEL = {largemouth:'LM Bass',smallmouth:'SM Bass',walleye:'Walleye',muskie:'Muskie',steelhead:'Steelhead',salmon:'Salmon',trout:'Trout',perch:'Perch'};
+
+async function loadSpotOutlook(spot){
+  const container = document.getElementById(`outlook-${spot.id}`);
+  if(!container) return;
+
+  const cached = _spotOutlookCache[spot.id];
+  if(cached && Date.now() - cached.ts < SPOT_OUTLOOK_TTL_MS){
+    container.innerHTML = cached.html;
+    return;
+  }
+
+  try {
+    const w = await fetchWeather(spot.lat, spot.lon, 7);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const days = [];
+    for(let d=0; d<5; d++){
+      const dt = new Date(today); dt.setDate(today.getDate()+d);
+      days.push(dt);
+    }
+
+    const rows = spot.species.map(sp=>{
+      const cells = days.map(dt=>{
+        const dayStr = dt.toISOString().slice(0,10);
+        const target = `${dayStr}T07`;
+        let hourIdx = w.hourly.time.findIndex(t=>t.startsWith(target));
+        if(hourIdx === -1) return `<td>—</td>`;
+        const { total } = quickScore(sp, w, hourIdx);
+        return `<td><span class="outlook-pill" style="background:${barColor(total)}">${total}</span></td>`;
+      }).join('');
+      return `<tr><td>${SPECIES_LABEL[sp]||sp}</td>${cells}</tr>`;
+    }).join('');
+
+    const headerCells = days.map((dt,i)=>`<th>${i===0?'Today':dt.toLocaleDateString('en-US',{weekday:'short'})}</th>`).join('');
+    const html = `<table class="outlook-table"><thead><tr><th></th>${headerCells}</tr></thead><tbody>${rows}</tbody></table>`;
+
+    _spotOutlookCache[spot.id] = {ts:Date.now(), html};
+    container.innerHTML = html;
+  } catch(e){
+    container.innerHTML = `<div class="spot-outlook-loading">Couldn't load outlook — check connection.</div>`;
+  }
 }
 
 // Export
