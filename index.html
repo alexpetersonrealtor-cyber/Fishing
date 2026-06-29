@@ -315,8 +315,8 @@
         <input type="text" id="locInput" placeholder="Lake, town, or zip" />
         <button class="btn-icon" id="gpsBtn" title="Use my location">📍</button>
         <button class="btn-icon" id="mapPickerBtn" title="Pick on map">🗺</button>
-        <button class="btn-primary" id="searchBtn">Check</button>
       </div>
+      <button class="btn-primary" id="searchBtn" style="width:100%;margin-top:8px;">Check Conditions</button>
       <div class="location-result" id="locResult"></div>
 
       <!-- Trip planner row -->
@@ -328,10 +328,13 @@
       </div>
 
       <div class="species-toggle">
-        <button id="btnBass" class="active">Bass</button>
+        <button id="btnLargemouth" class="active">LM Bass</button>
+        <button id="btnSmallmouth">SM Bass</button>
         <button id="btnWalleye">Walleye</button>
+        <button id="btnMuskie">Muskie</button>
         <button id="btnSalmon">Salmon</button>
         <button id="btnTrout">Trout</button>
+        <button id="btnPerch">Perch</button>
       </div>
 
       <!-- Boat / Shore mode selector -->
@@ -620,7 +623,7 @@
 // ============================================================
 //  STATE
 // ============================================================
-let state = { species:'bass', coords:null, weather:null, manualWaterTemp:null, tripTarget:null, mode:'shore' };
+let state = { species:'largemouth', coords:null, weather:null, manualWaterTemp:null, tripTarget:null, mode:'shore' };
 let spots = [];
 let trips = [];
 let editingSpotId = null;
@@ -654,7 +657,8 @@ function loadData(){
     if(p){
       const prefs = JSON.parse(p);
       if(prefs.location) document.getElementById('locInput').value = prefs.location;
-      if(prefs.species) setSpecies(prefs.species, false);
+      const sp = prefs.species==='bass'?'largemouth':prefs.species;
+      if(sp && speciesBtns[sp]) setSpecies(sp, false);
     }
   }catch(e){}
 }
@@ -680,7 +684,7 @@ tabs.log.addEventListener('click', ()=>switchTab('log'));
 // ============================================================
 //  SPECIES TOGGLE
 // ============================================================
-const speciesBtns = { bass:document.getElementById('btnBass'), walleye:document.getElementById('btnWalleye'), salmon:document.getElementById('btnSalmon'), trout:document.getElementById('btnTrout') };
+const speciesBtns = { largemouth:document.getElementById('btnLargemouth'), smallmouth:document.getElementById('btnSmallmouth'), walleye:document.getElementById('btnWalleye'), muskie:document.getElementById('btnMuskie'), salmon:document.getElementById('btnSalmon'), trout:document.getElementById('btnTrout'), perch:document.getElementById('btnPerch') };
 function setSpecies(sp, save=true){
   state.species = sp;
   Object.entries(speciesBtns).forEach(([k,b])=>b.classList.toggle('active',k===sp));
@@ -811,6 +815,60 @@ function moonPhase(date){
   else if(phase<0.78) name='Last Quarter';
   else name='Waning Crescent';
   return { phase, illum, name, activity:Math.abs(Math.cos(2*Math.PI*phase)) };
+}
+
+// Solunar period calculator — computes major (moon overhead/underfoot) and minor (rise/set) feeding windows
+function solunar(date, lat, lon){
+  const toR = d => d * Math.PI / 180;
+  const JD = date.getTime() / 86400000 + 2440587.5;
+  const d0 = JD - 2451545.0;
+  // Moon mean longitude and anomaly
+  const L  = ((218.316 + 13.176396 * d0) % 360 + 360) % 360;
+  const M  = ((134.963 + 13.064993 * d0) % 360 + 360) % 360;
+  // Ecliptic longitude (simplified)
+  const lam = L + 6.289 * Math.sin(toR(M));
+  // Right ascension (approximate, ignore parallax)
+  const eps = 23.439;
+  const RA = (Math.atan2(Math.sin(toR(lam)) * Math.cos(toR(eps)), Math.cos(toR(lam))) * 180 / Math.PI + 360) % 360;
+  // Greenwich sidereal time
+  const T = d0 / 36525;
+  const GMST = ((100.4606 + 36000.7700 * T + 360.98564 * (d0 % 1)) % 360 + 360) % 360;
+  const LST  = (GMST + lon + 360) % 360;
+  // Hour angle → hours until transit (HA = 0 at transit)
+  let HA = (LST - RA + 360) % 360;
+  if(HA > 180) HA -= 360;
+  const lunarDay = 24.8415; // hours
+  let hoursToTransit = -HA / 360 * lunarDay;
+  const utcH = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
+  const localH = utcH + lon/15;
+  let transitH = ((localH + hoursToTransit) % 24 + 24) % 24;
+  const oppositeH = (transitH + lunarDay/2) % 24;
+  // Approximate minor periods from transit ±6h
+  const minor1H = (transitH - 6.21 + 24) % 24;
+  const minor2H = (transitH + 6.21) % 24;
+
+  const nowLocal = ((utcH + lon/15) % 24 + 24) % 24;
+  const fmtH = h => { const m=Math.round(h*60)%1440; const hr=Math.floor(m/60)%24; const mn=m%60; const ap=hr>=12?'pm':'am'; return `${hr%12||12}:${mn.toString().padStart(2,'0')} ${ap}`; };
+  const nearestMin = (h) => { let d=((nowLocal-h+12)%24)-12; return Math.abs(d)*60; };
+  const minToMajor1 = nearestMin(transitH);
+  const minToMajor2 = nearestMin(oppositeH);
+  const minToMinor1 = nearestMin(minor1H);
+  const minToMinor2 = nearestMin(minor2H);
+  const bestMajor = Math.min(minToMajor1, minToMajor2);
+  const bestMinor = Math.min(minToMinor1, minToMinor2);
+  const inMajor = bestMajor <= 60;
+  const inMinor = !inMajor && bestMinor <= 45;
+  const solunarScore = inMajor ? 100 : inMinor ? 72 : bestMajor < 120 ? 55 : 35;
+
+  return { major1:fmtH(transitH), major2:fmtH(oppositeH), minor1:fmtH(minor1H), minor2:fmtH(minor2H), inMajor, inMinor, solunarScore };
+}
+
+function moonScore(moon, sp){
+  const base = 30 + moon.activity * 70;
+  // Muskie weight moon phase most heavily; perch least
+  if(sp==='muskie') return clamp(Math.round(base*1.1), 0, 100);
+  if(sp==='perch')  return clamp(Math.round(40 + moon.activity*35), 0, 100);
+  return Math.round(base);
 }
 
 // ============================================================
@@ -1029,23 +1087,75 @@ function calcDepthTarget(species, waterTempF, windMph, pressureSlope, now, w){
       method = `Jig or crawler harness at ${primaryFt} ft along rock ledges and weed edges. Troll at 1.2–1.8 mph.`;
     }
 
-  } else { // bass
+  } else if(species === 'smallmouth'){
+    if(isHotAfternoon && waterTempF > 70){
+      minFt = 10; maxFt = 25; primaryFt = 16;
+      reasoning = `Hot afternoon (${waterTempF.toFixed(0)}°F) — smallmouth push deep to rock humps and mid-lake structure.`;
+      method = `Drop-shot or tube jig at ${primaryFt} ft on rocky points and offshore humps.`;
+    } else if(isMorning || isNightOrDusk){
+      minFt = 2; maxFt = 10; primaryFt = 5;
+      reasoning = `${isMorning?'Morning':'Low-light'} — smallmouth shallow on rock and gravel. Water ${waterTempF.toFixed(0)}°F.`;
+      method = 'Topwater or jerkbait over 2–8 ft gravel flats and rocky banks.';
+    } else if(waterTempF < 52){
+      minFt = 8; maxFt = 22; primaryFt = 14;
+      reasoning = `Cold water (${waterTempF.toFixed(0)}°F) — smallmouth stack deep on rock and current breaks.`;
+      method = `Ned rig or small tube at ${primaryFt} ft. Slow and methodical on main-lake rock structure.`;
+    } else {
+      minFt = 4; maxFt = 14; primaryFt = 8;
+      if(pressureSlope <= -0.2){ minFt=2; maxFt=10; primaryFt=5; }
+      reasoning = `${waterTempF.toFixed(0)}°F — smallmouth active on rock and gravel structure${pressureSlope<=-0.2?', falling pressure draws them shallower':''}.`;
+      method = `Ned rig, drop-shot, or tube at ${primaryFt} ft. Focus on rock transitions and current.`;
+    }
+  } else if(species === 'muskie'){
+    if(waterTempF > 76){
+      minFt = 12; maxFt = 30; primaryFt = 20;
+      reasoning = `Warm surface (${waterTempF.toFixed(0)}°F) pushes muskie to deep main-lake structure. Thermocline est. ${thermoclineDepthFt||'—'} ft.`;
+      method = `Large glide baits or bucktails trolled at ${primaryFt} ft along deep weed edges or humps.`;
+    } else if(waterTempF < 50){
+      minFt = 8; maxFt = 20; primaryFt = 14;
+      reasoning = `Cold water (${waterTempF.toFixed(0)}°F) — muskie lethargic; target sunny structure that warms fastest.`;
+      method = `Slow-roll a large jerkbait or glide bait at ${primaryFt} ft. Very slow retrieves.`;
+    } else if(isNightOrDusk){
+      minFt = 3; maxFt = 12; primaryFt = 6;
+      reasoning = `Low light — muskie hunt shallow in ${waterTempF.toFixed(0)}°F water. Night is prime time.`;
+      method = 'Large topwaters or bucktails in 2–8 ft over weed flats and points at night.';
+    } else {
+      minFt = 6; maxFt = 20; primaryFt = 10;
+      reasoning = `${waterTempF.toFixed(0)}°F — good muskie temp. Cover weed edges, points, and transition zones.`;
+      method = `Bucktail, large crankbait, or jerkbait at ${primaryFt} ft. Vary retrieve speed until fish respond.`;
+    }
+  } else if(species === 'perch'){
+    if(waterTempF > 70){
+      minFt = 15; maxFt = 30; primaryFt = 22;
+      reasoning = `Warm surface (${waterTempF.toFixed(0)}°F) — perch school in deeper, cooler water.`;
+      method = `Vertical jig with minnow at ${primaryFt} ft over sand or gravel bottom. Follow the schools.`;
+    } else if(waterTempF < 48){
+      minFt = 10; maxFt = 25; primaryFt = 18;
+      reasoning = `Cold water (${waterTempF.toFixed(0)}°F) — perch are deeper and school tightly. Find them and you'll catch them.`;
+      method = `Small jig tipped with waxworm or minnow at ${primaryFt} ft. Slow jigging motion.`;
+    } else {
+      minFt = 8; maxFt = 22; primaryFt = 14;
+      if(pressureSlope <= -0.2){ minFt=5; maxFt=15; primaryFt=10; }
+      reasoning = `${waterTempF.toFixed(0)}°F — perch active${pressureSlope<=-0.2?', falling pressure draws schools shallower':' on mid-depth structure and weed edges'}.`;
+      method = `Small jig or live minnow at ${primaryFt} ft near structure, rock piles, or weed transitions.`;
+    }
+  } else { // largemouth
     if(isHotAfternoon && waterTempF > 74){
       minFt = 12; maxFt = 28; primaryFt = 18;
-      reasoning = `Hot afternoon (${waterTempF.toFixed(0)}°F) — bass moved deep to find cooler water. Thermocline est. ${thermoclineDepthFt||'—'} ft.`;
+      reasoning = `Hot afternoon (${waterTempF.toFixed(0)}°F) — largemouth moved deep to cooler water. Thermocline est. ${thermoclineDepthFt||'—'} ft.`;
       method = `Drop-shot or Carolina rig at ${primaryFt} ft on main-lake humps and ledges. Slow presentation.`;
     } else if(isMorning || isNightOrDusk){
       minFt = 1; maxFt = 8; primaryFt = 4;
-      reasoning = `${isMorning?'Morning feed':'Low-light window'} — bass shallow. Water at ${waterTempF.toFixed(0)}°F.`;
+      reasoning = `${isMorning?'Morning feed':'Low-light window'} — largemouth shallow. Water at ${waterTempF.toFixed(0)}°F.`;
       method = 'Topwater, swim jig, or spinnerbait in 1–6 ft. Target weed edges and points.';
     } else if(waterTempF < 58){
       minFt = 6; maxFt = 18; primaryFt = 12;
-      reasoning = `Cool water (${waterTempF.toFixed(0)}°F) slows metabolism — bass staging on deeper structure.`;
+      reasoning = `Cool water (${waterTempF.toFixed(0)}°F) slows metabolism — largemouth staging on deeper structure.`;
       method = `Jig or swimbait at ${primaryFt} ft on sunny, dark-bottom coves and rocky banks.`;
     } else {
       minFt = 5; maxFt = 15; primaryFt = 8;
       if(pressureSlope <= -0.2){ minFt=3; maxFt=10; primaryFt=6; }
-      reasoning = `${waterTempF.toFixed(0)}°F${pressureSlope<=-0.2?' and falling pressure — fish feeding up':' — prime feeding range for bass'}.`;
+      reasoning = `${waterTempF.toFixed(0)}°F${pressureSlope<=-0.2?' and falling pressure — fish feeding up':' — prime feeding range for largemouth'}.`;
       method = `Shaky head or finesse jig at ${primaryFt} ft. Cover transition zones between hard and soft bottom.`;
     }
   }
@@ -1062,10 +1172,13 @@ function calcDepthTarget(species, waterTempF, windMph, pressureSlope, now, w){
 //  SCORING
 // ============================================================
 const WEIGHTS={
-  bass:   {pressure:0.30,wind:0.20,moon:0.20,temp:0.20,daylight:0.10},
-  walleye:{pressure:0.25,wind:0.20,moon:0.25,temp:0.20,daylight:0.10},
-  salmon: {pressure:0.25,wind:0.15,moon:0.15,temp:0.35,daylight:0.10},
-  trout:  {pressure:0.25,wind:0.15,moon:0.15,temp:0.35,daylight:0.10},
+  largemouth:{pressure:0.28,wind:0.20,moon:0.22,temp:0.20,daylight:0.10},
+  smallmouth:{pressure:0.28,wind:0.22,moon:0.20,temp:0.20,daylight:0.10},
+  walleye:   {pressure:0.25,wind:0.20,moon:0.25,temp:0.20,daylight:0.10},
+  muskie:    {pressure:0.20,wind:0.15,moon:0.35,temp:0.20,daylight:0.10},
+  salmon:    {pressure:0.25,wind:0.15,moon:0.15,temp:0.35,daylight:0.10},
+  trout:     {pressure:0.25,wind:0.15,moon:0.15,temp:0.35,daylight:0.10},
+  perch:     {pressure:0.25,wind:0.20,moon:0.15,temp:0.25,daylight:0.15},
 };
 function pressureScore(slope,current){
   let b=slope<=-0.5?92:slope<=-0.15?80:slope<0.15?58:slope<0.5?42:22;
@@ -1076,10 +1189,13 @@ function windScore(mph){
   return mph<2?50:mph<=10?92:mph<=18?68:mph<=28?45:28;
 }
 const SPECIES_TEMP={
-  bass:   {center:68,upperMult:1.0,lowerMult:1.3},
-  walleye:{center:62,upperMult:1.4,lowerMult:1.0},
-  salmon: {center:54,upperMult:1.8,lowerMult:0.8},
-  trout:  {center:58,upperMult:1.8,lowerMult:0.8},
+  largemouth:{center:68,upperMult:1.0,lowerMult:1.3},
+  smallmouth:{center:62,upperMult:1.1,lowerMult:1.2},
+  walleye:   {center:62,upperMult:1.4,lowerMult:1.0},
+  muskie:    {center:65,upperMult:1.1,lowerMult:1.0},
+  salmon:    {center:54,upperMult:1.8,lowerMult:0.8},
+  trout:     {center:58,upperMult:1.8,lowerMult:0.8},
+  perch:     {center:60,upperMult:1.2,lowerMult:1.0},
 };
 function tempScore(tempF,sp){
   const cfg=SPECIES_TEMP[sp]||SPECIES_TEMP.bass;
@@ -1108,7 +1224,7 @@ function habitatScore(spot, ctx){
   if(pressureSlope<-0.15&&(struct.includes('weed')||struct.includes('timber')||struct.includes('cove'))){
     bonus+=0.12; reasons.push('pre-front bite — fish pushed into shallow cover');
   }
-  if(sp.includes('bass')&&waterTemp>60&&waterTemp<80&&(struct.includes('weed')||struct.includes('flat')||struct.includes('dock'))){
+  if((sp.includes('largemouth')||sp.includes('smallmouth')||sp.includes('bass'))&&waterTemp>60&&waterTemp<80&&(struct.includes('weed')||struct.includes('flat')||struct.includes('dock'))){
     bonus+=0.10; reasons.push('bass temp in ideal range for this structure');
   }
   if(sp.includes('walleye')){
@@ -1167,9 +1283,10 @@ function buildFactors(){
   const sunrise=new Date(w.daily.sunrise[dayIdx]);
   const sunset=new Date(w.daily.sunset[dayIdx]);
 
+  const sol = solunar(now, state.coords?.lat||42, state.coords?.lon||-88);
   const pScore=pressureScore(pt.slope,pt.current);
   const wScore=windScore(wind);
-  const mScore=30+moon.activity*70;
+  const mScore=moonScore(moon,sp);
   const tScore=tempScore(waterTemp,sp);
   const dScore=daylightScore(now,sunrise,sunset);
   const tw=pt.slope<=-0.15?'falling':pt.slope>=0.15?'rising':'steady';
@@ -1184,14 +1301,26 @@ function buildFactors(){
     :wind<=18?'moderate — still workable, may push bait to the downwind shore.'
     :wind<=28?'strong — downwind banks can load up with baitfish.'
     :'very strong — safety first; tight to shore or sit this one out.';
-  const moonNote=moon.activity>0.85?`${moon.name} — historically one of the more active feeding windows.`
-    :moon.activity>0.4?`${moon.name} — moderate lunar pull on activity.`
-    :`${moon.name} — quarter moons are usually the quietest lunar phase.`;
+
+  const solNote = sol.inMajor ? '🔴 MAJOR PERIOD active — peak feeding window right now.' : sol.inMinor ? '🟡 Minor period active — elevated activity expected.' : `Next major: ${sol.major1} & ${sol.major2} | Minor: ${sol.minor1}, ${sol.minor2}.`;
+  const moonNoteBySpecies = {
+    largemouth: moon.activity>0.85?'prime topwater and night-bite window. Largemouth key heavily on lunar cycles.':moon.activity>0.4?'moderate lunar influence; focus on dawn/dusk edges.':'quiet lunar phase; work structure harder with slower presentations.',
+    smallmouth: moon.activity>0.85?'smallmouth push shallow and feed aggressively on new/full moon.':moon.activity>0.4?'moderate activity; rock breaks and current seams best.':'slower phase; ned rig or drop-shot on deeper rock is the move.',
+    walleye:    moon.activity>0.85?'peak walleye movement — fish every transition edge, especially at dark.':moon.activity>0.4?'moderate feeding activity; dusk and dawn windows are critical.':'walleye tightest to cover; slow down and present right at the bottom.',
+    muskie:     moon.activity>0.85?'legendary muskie moon — full and new moon move the biggest fish. Prime for night hunting.':moon.activity>0.4?'moderately active; cover water with large presentations.':'toughest muskie phase — slow down, use big blades or glide baits.',
+    salmon:     moon.activity>0.85?'strong lunar pull — salmon are more active, especially near dawn/dusk.':moon.activity>0.4?'moderate lunar influence; standard depths and trolling speed.':'low lunar activity; focus on temp breaks and thermocline depth.',
+    trout:      moon.activity>0.85?'trout feed actively in strong lunar windows; low-light is prime.':moon.activity>0.4?'moderate trout activity; nymph or streamer near structure.':'quarter moon is the quietest phase — size down your presentation.',
+    perch:      moon.activity>0.85?'perch schools move more freely; target open-water columns and structure edges.':moon.activity>0.4?'moderate perch activity; vertical jigging over drop-offs.':'perch are less moon-sensitive — focus on depth, temp, and bait schools.',
+  };
+  const moonNote=`${moon.name} (${Math.round(moon.illum*100)}% illuminated) — ${moonNoteBySpecies[sp]||'check lunar calendar for activity windows.'} ${solNote}`;
   const tempNote={
-    bass:waterTemp>80?'hot — bass slide deep or go nocturnal; fish dawn/dusk edges.':waterTemp<55?'cool — bass metabolism is slow, expect a deliberate bite.':'in the range bass feed most aggressively.',
+    largemouth:waterTemp>80?'hot — largemouth go deep or nocturnal; target dawn/dusk edges.':waterTemp<55?'cool — slow metabolism; drop-shot or shaky head near bottom.':'in the ideal largemouth feeding window.',
+    smallmouth:waterTemp>75?'warm — smallmouth push deeper or to current breaks.':waterTemp<50?'cold — slow presentation; ned rig or small tube on rock.':'prime smallmouth temp — rock structure and current seams are key.',
     walleye:waterTemp>72?'warm — move deeper or fish low-light windows.':waterTemp<48?'cold — walleye bite but slower presentations work better.':'prime walleye temp — rocky structure and transition zones.',
+    muskie:waterTemp>76?'warm — muskie are most active 65–76°F; fish deep edges at dawn.':waterTemp<50?'cold — muskie go lethargic; slow down dramatically, try big jerkbaits.':'optimal muskie feeding window — cover water aggressively.',
     salmon:waterTemp>65?'warm — seek thermocline, deep, or cold inflows.':waterTemp<42?'very cold — salmon sluggish; slow-troll or drift bait.':'good salmon temp — suspended bait near structure.',
     trout:waterTemp>66?'warm — shade, inflows, or deeper cooler water.':waterTemp<48?'cold — trout still feed, expect a slower retrieve.':'right in the window trout feed most actively.',
+    perch:waterTemp>72?'warm — perch push deeper to cooler water; jigging over 15–25 ft.':waterTemp<45?'cold — perch still bite; minnow or ice-style jig near bottom.':'prime perch temp — structure edges and open-water schools.',
   }[sp]||'check water temp for optimal bite window.';
   const dayNote=dScore>=90?'right in a dawn/dusk window — prime time.'
     :dScore>=75?'close to first or last light.'
@@ -1204,7 +1333,7 @@ function buildFactors(){
     factors:[
       {key:'pressure',name:'Barometric Pressure',icon:'gauge',score:pScore,weight:WEIGHTS[sp].pressure,value:`${pt.current.toFixed(0)} hPa, ${tw}`,detail:trendNote},
       {key:'wind',name:'Wind',icon:'wind',score:wScore,weight:WEIGHTS[sp].wind,value:`${wind.toFixed(0)} mph ${compass(windDir)}`,detail:windNote},
-      {key:'moon',name:'Moon Phase',icon:'moon',score:mScore,weight:WEIGHTS[sp].moon,value:`${Math.round(moon.illum*100)}% illum.`,detail:moonNote},
+      {key:'moon',name:'Moon / Solunar',icon:'moon',score:mScore,weight:WEIGHTS[sp].moon,value:`${moon.name}${sol.inMajor?' 🔴':sol.inMinor?' 🟡':''}`,detail:moonNote},
       {key:'temp',name:'Water Temp',icon:'temp',score:tScore,weight:WEIGHTS[sp].temp,value:`${waterTemp.toFixed(0)}°F${state.manualWaterTemp!==null?'':' (est.)'}`,detail:tempNote},
       {key:'daylight',name:'Daylight',icon:'sun',score:dScore,weight:WEIGHTS[sp].daylight,value:dayVal,detail:dayNote},
     ],
@@ -1230,7 +1359,7 @@ const STRUCTURES = [
     desc:'Land extending into the water — fish move along these as they transition between deep and shallow.',
     score(c){ // c = {waterTemp, windMph, pressureSlope, now, sunrise, sunset, species}
       let s = 55;
-      if(c.species==='bass'){
+      if(c.species==='largemouth'||c.species==='smallmouth'){
         s += c.waterTemp>=58&&c.waterTemp<=78 ? 20 : -10;
         s += c.pressureSlope<=-0.15 ? 15 : c.pressureSlope>=0.15 ? -5 : 5;
         s += isActiveWindow(c) ? 10 : 0;
@@ -1245,8 +1374,10 @@ const STRUCTURES = [
     },
     depth(c){ return c.waterTemp>=65?'8–18 ft off tip':c.waterTemp>=55?'5–12 ft':'2–8 ft'; },
     technique(c){
-      if(c.species==='bass') return c.waterTemp>=65?'Swim jig or drop-shot along the deep edge':'Crankbait parallel to the point';
+      if(c.species==='largemouth'||c.species==='smallmouth') return c.waterTemp>=65?'Swim jig or drop-shot along the deep edge':'Crankbait parallel to the point';
       if(c.species==='walleye') return 'Jig slowly along the slope at dusk/dawn';
+      if(c.species==='muskie') return 'Troll a large bucktail or jerkbait off the tip — muskie wait here to ambush';
+      if(c.species==='perch') return 'Vertical jig with minnow off the edge where depth changes';
       return 'Spoon or streamer on the deeper side';
     },
   },
@@ -1255,7 +1386,7 @@ const STRUCTURES = [
     desc:'Sudden depth changes where fish stage between feeding and resting zones.',
     score(c){
       let s = 50;
-      if(c.species==='bass'){
+      if(c.species==='largemouth'||c.species==='smallmouth'){
         s += c.waterTemp>=70 ? 20 : c.waterTemp>=58 ? 10 : -5;
         s += c.pressureSlope>=0.15 ? 15 : c.pressureSlope<=-0.15 ? -5 : 5; // post-front bass go deep
       } else if(c.species==='walleye'){
@@ -1267,12 +1398,12 @@ const STRUCTURES = [
       return Math.max(0,Math.min(100,s));
     },
     depth(c){
-      if(c.species==='bass') return c.waterTemp>=70?'12–25 ft':'8–18 ft';
+      if(c.species==='largemouth'||c.species==='smallmouth') return c.waterTemp>=70?'12–25 ft':'8–18 ft';
       if(c.species==='walleye') return '10–25 ft ledge face';
       return c.waterTemp>=65?'20–45 ft':'10–25 ft';
     },
     technique(c){
-      if(c.species==='bass') return 'Carolina rig or football jig dragged along the break';
+      if(c.species==='largemouth'||c.species==='smallmouth') return 'Carolina rig or football jig dragged along the break';
       if(c.species==='walleye') return 'Live-bait rig or blade bait on the bottom';
       return 'Troll a spoon just above the thermocline';
     },
@@ -1282,7 +1413,7 @@ const STRUCTURES = [
     desc:'Inside edge, outside edge, and pockets of submerged vegetation — prime ambush cover.',
     score(c){
       let s = 60;
-      if(c.species==='bass'){
+      if(c.species==='largemouth'||c.species==='smallmouth'){
         s += c.waterTemp>=62&&c.waterTemp<=82 ? 20 : -10;
         s += isActiveWindow(c) ? 10 : -5;
         s += c.pressureSlope<=-0.15 ? 15 : 5;
@@ -1296,7 +1427,7 @@ const STRUCTURES = [
     },
     depth(c){ return c.waterTemp>=70?'outside edge 8–14 ft':'inside edge 3–8 ft'; },
     technique(c){
-      if(c.species==='bass') return 'Punch/flip into pockets; frog or buzzbait over matted grass';
+      if(c.species==='largemouth'||c.species==='smallmouth') return 'Punch/flip into pockets; frog or buzzbait over matted grass';
       if(c.species==='walleye') return 'Weedless jig or spinner along the outer edge at dusk';
       return 'Nymph or small streamer through the openings';
     },
@@ -1307,7 +1438,7 @@ const STRUCTURES = [
     score(c){
       let s = 45;
       const month = c.now.getMonth()+1;
-      if(c.species==='bass'){
+      if(c.species==='largemouth'||c.species==='smallmouth'){
         s += (month>=3&&month<=5) ? 25 : (month>=9&&month<=10) ? 15 : -5; // spring/fall
         s += c.waterTemp>=58&&c.waterTemp<=72 ? 15 : 0;
         s += isActiveWindow(c) ? 10 : 0;
@@ -1321,7 +1452,7 @@ const STRUCTURES = [
     },
     depth(c){ return c.waterTemp>=65?'5–12 ft near mouth':'2–6 ft shallow flats'; },
     technique(c){
-      if(c.species==='bass') return 'Topwater at dawn, ned rig or shaky head midday';
+      if(c.species==='largemouth'||c.species==='smallmouth') return 'Topwater at dawn, ned rig or shaky head midday';
       if(c.species==='walleye') return 'Jig or lindy rig near the cove mouth at night';
       return 'Dry fly or small spinner in the shallows';
     },
@@ -1331,7 +1462,7 @@ const STRUCTURES = [
     desc:'Hard bottom and rock piles hold crayfish and baitfish — high-percentage feeding zones.',
     score(c){
       let s = 55;
-      if(c.species==='bass'){
+      if(c.species==='largemouth'||c.species==='smallmouth'){
         s += 15; // bass love rock all year
         s += c.pressureSlope<=-0.15 ? 15 : 5;
         s += isActiveWindow(c) ? 10 : 0;
@@ -1346,7 +1477,7 @@ const STRUCTURES = [
     },
     depth(c){ return '2–10 ft along the face'; },
     technique(c){
-      if(c.species==='bass') return 'Craw-pattern crankbait or tube jig bounced off rock';
+      if(c.species==='largemouth'||c.species==='smallmouth') return 'Craw-pattern crankbait or tube jig bounced off rock';
       if(c.species==='walleye') return 'Jig tipped with minnow dragged along the face';
       return 'Spoon or streamer worked with current';
     },
@@ -1360,6 +1491,7 @@ const STRUCTURES = [
       if(c.pressureSlope<=-0.15) s += 15;
       if(c.species==='trout'||c.species==='salmon') s += 25;
       if(c.species==='walleye') s += 10;
+      if(c.species==='muskie') s += 15; // muskie ambush baitfish at creek mouths
       const month = c.now.getMonth()+1;
       if(month>=3&&month<=5) s += 10; // spring runoff
       return Math.max(0,Math.min(100,s));
@@ -1367,7 +1499,7 @@ const STRUCTURES = [
     depth(c){ return '2–8 ft at the fan'; },
     technique(c){
       if(c.species==='trout'||c.species==='salmon') return 'Drift spawn sacs or stream nymphs in the current seam';
-      if(c.species==='bass') return 'Swimbait or crankbait in the plume';
+      if(c.species==='largemouth'||c.species==='smallmouth') return 'Swimbait or crankbait in the plume';
       return 'Live bait suspended below a float in the current';
     },
   },
@@ -1377,7 +1509,8 @@ const STRUCTURES = [
     score(c){
       let s = 35;
       if(isActiveWindow(c)) s += 25; // flats only fire during active windows
-      if(c.species==='bass'&&c.waterTemp>=60&&c.waterTemp<=75) s += 15;
+      if((c.species==='largemouth'||c.species==='smallmouth')&&c.waterTemp>=60&&c.waterTemp<=75) s += 15;
+      if(c.species==='perch') s += 10; // perch forage on flats
       if(c.pressureSlope<=-0.15) s += 10;
       if(c.windMph>=12) s -= 15; // too rough on flats
       if(c.pressureSlope>=0.3) s -= 15; // post-front fish leave flats
@@ -1385,7 +1518,7 @@ const STRUCTURES = [
     },
     depth(c){ return '2–5 ft'; },
     technique(c){
-      if(c.species==='bass') return 'Walking topwater at dawn; ned rig sight-fishing by day';
+      if(c.species==='largemouth'||c.species==='smallmouth') return 'Walking topwater at dawn; ned rig sight-fishing by day';
       if(c.species==='walleye') return 'Jig at dusk — walleye push to flats to feed after dark';
       return 'Dry fly or small streamer on the surface';
     },
@@ -1395,7 +1528,7 @@ const STRUCTURES = [
     desc:'Fallen trees and submerged wood — year-round structure and shade that concentrates fish.',
     score(c){
       let s = 55;
-      if(c.species==='bass'){
+      if(c.species==='largemouth'||c.species==='smallmouth'){
         s += 15;
         s += c.waterTemp>=60 ? 10 : 0;
         s += isActiveWindow(c) ? 10 : 0;
@@ -1406,7 +1539,7 @@ const STRUCTURES = [
     },
     depth(c){ return c.waterTemp>=70?'shaded, 4–10 ft':'2–6 ft'; },
     technique(c){
-      if(c.species==='bass') return 'Flip a beaver or craw right into the branches; slow roll swimbait along the trunk';
+      if(c.species==='largemouth'||c.species==='smallmouth') return 'Flip a beaver or craw right into the branches; slow roll swimbait along the trunk';
       return 'Present bait tight to the structure';
     },
   },
@@ -1415,7 +1548,7 @@ const STRUCTURES = [
     desc:'Shaded, structured, with deep-water access — seasonal holding spots that are easy to read.',
     score(c){
       let s = 50;
-      if(c.species==='bass'){
+      if(c.species==='largemouth'||c.species==='smallmouth'){
         s += c.waterTemp>=65 ? 20 : 0; // summer bass love docks
         s += !isActiveWindow(c) ? 10 : 0; // midday dock skipping
       } else { s -= 10; }
@@ -1424,7 +1557,7 @@ const STRUCTURES = [
     },
     depth(c){ return 'target back third of dock in 4–10 ft'; },
     technique(c){
-      return c.species==='bass' ? 'Skip a wacky rig or shaky head under the deck; pitch a jig to the corners' : 'Drop a jig straight down alongside the pilings';
+      return c.species==='largemouth'||c.species==='smallmouth' ? 'Skip a wacky rig or shaky head under the deck; pitch a jig to the corners' : 'Drop a jig straight down alongside the pilings';
     },
   },
 ];
@@ -1775,7 +1908,7 @@ function renderDepthTarget(ctx){
   const widthPct = (Math.min(maxScale,dt.maxFt) - Math.min(maxScale,dt.minFt))/maxScale*100;
   const tickPct  = fillPct(dt.primaryFt);
 
-  const speciesLabel = {bass:'Bass',walleye:'Walleye',salmon:'Salmon',trout:'Trout'}[state.species]||state.species;
+  const speciesLabel = {largemouth:'Largemouth Bass',smallmouth:'Smallmouth Bass',walleye:'Walleye',muskie:'Muskie',salmon:'Salmon',trout:'Trout',perch:'Perch'}[state.species]||state.species;
   const isBoat = state.mode === 'boat';
   const cardTitle = isBoat
     ? `🚤 ${speciesLabel} Depth Target — Open Water`
