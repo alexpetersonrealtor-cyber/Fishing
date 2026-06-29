@@ -1,6 +1,6 @@
 {
-  "name": "Contour — Freshwater Bite Forecast",
-  "short_name": "Contour",
+  "name": "Fish Hawker — Freshwater Bite Forecast",
+  "short_name": "Fish Hawker",
   "description": "Freshwater fishing bite forecast and spot tracker for bass, walleye, salmon, and trout.",
   "start_url": "/",
   "display": "standalone",

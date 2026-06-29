@@ -7,12 +7,12 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Contour" />
+<meta name="apple-mobile-web-app-title" content="Fish Hawker" />
 <link rel="manifest" href="manifest.json" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="apple-touch-icon" href="icon-192.png" />
-<title>Contour — Freshwater Bite Forecast</title>
+<title>Fish Hawker — Freshwater Bite Forecast</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
@@ -263,7 +263,7 @@
 <div class="wrap">
 
   <p class="eyebrow">freshwater bite forecast & spot tracker</p>
-  <h1>Contour</h1>
+  <h1>Fish Hawker</h1>
 
   <div class="tabs">
     <button class="tab active" id="tabForecast">Forecast</button>
@@ -595,9 +595,9 @@ function todayISO(){ return new Date().toISOString().slice(0,10); }
 // ============================================================
 function persist(){
   try{
-    localStorage.setItem('contour:spots', JSON.stringify(spots));
-    localStorage.setItem('contour:trips', JSON.stringify(trips));
-    localStorage.setItem('contour:prefs', JSON.stringify({
+    localStorage.setItem('fishhawker:spots', JSON.stringify(spots));
+    localStorage.setItem('fishhawker:trips', JSON.stringify(trips));
+    localStorage.setItem('fishhawker:prefs', JSON.stringify({
       location: document.getElementById('locInput').value,
       species: state.species
     }));
@@ -605,9 +605,9 @@ function persist(){
 }
 function loadData(){
   try{
-    const s = localStorage.getItem('contour:spots'); if(s) spots = JSON.parse(s);
-    const t = localStorage.getItem('contour:trips'); if(t) trips = JSON.parse(t);
-    const p = localStorage.getItem('contour:prefs');
+    const s = localStorage.getItem('fishhawker:spots'); if(s) spots = JSON.parse(s);
+    const t = localStorage.getItem('fishhawker:trips'); if(t) trips = JSON.parse(t);
+    const p = localStorage.getItem('fishhawker:prefs');
     if(p){
       const prefs = JSON.parse(p);
       if(prefs.location) document.getElementById('locInput').value = prefs.location;
@@ -673,7 +673,7 @@ document.getElementById('gpsBtn').addEventListener('click', () => {
   btn.disabled = true;
   getGPS(async (lat, lon) => {
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=14`, { headers:{'User-Agent':'ContourFishingApp/1.0'} });
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=14`, { headers:{'User-Agent':'FishHawkerApp/1.0'} });
       const data = await res.json();
       const a = data.address || {};
       const label = [
@@ -1614,7 +1614,7 @@ document.getElementById('exportBtn').addEventListener('click',()=>{
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=`contour-export-${todayISO()}.json`;
+  a.download=`fishhawker-export-${todayISO()}.json`;
   a.click(); URL.revokeObjectURL(a.href);
 });
 
@@ -1881,7 +1881,7 @@ document.getElementById('launchGpsBtn').addEventListener('click', () => {
     btn.textContent = '✓'; btn.disabled = false;
     setTimeout(()=>{ btn.textContent='📍'; },2000);
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=14`, {headers:{'User-Agent':'ContourFishingApp/1.0'}});
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=14`, {headers:{'User-Agent':'FishHawkerApp/1.0'}});
       const d = await res.json();
       const a = d.address||{};
       boatState.launchLabel = [a.marina||a.harbour||a.amenity||a.city||a.town||a.village, a.state].filter(Boolean).join(', ') || `${lat.toFixed(4)},${lon.toFixed(4)}`;
