@@ -1027,13 +1027,10 @@ async function runSearch(q){
   const btn=document.getElementById('searchBtn');
   btn.disabled=true; setStatus('Finding conditions…');
   document.getElementById('locResult').textContent='';
+  let loc;
   try{
-    const loc=await geocode(q);
+    loc=await geocode(q);
     document.getElementById('locResult').textContent=`📍 ${loc.label}`;
-    const weather=await fetchWeather(loc.lat,loc.lon);
-    state.coords=loc; state.weather=weather; state.manualWaterTemp=null;
-    document.getElementById('waterTempInput').value='';
-    setStatus(''); renderScore(); persist();
   }catch(e){
     if(e.message && e.message.startsWith('NOTFOUND:')){
       const name = e.message.slice(9);
@@ -1060,9 +1057,28 @@ async function runSearch(q){
         if(e.key==='Enter'){ const v=e.target.value.trim(); if(v){ document.getElementById('locInput').value=v; runSearch(v); } }
       });
     } else {
-      setStatus('Could not reach weather data. Check your connection or try a nearby town.', true);
+      setStatus('Location not found. Try a different spelling or nearby town.', true);
     }
-  }finally{ btn.disabled=false; }
+    btn.disabled=false; return;
+  }
+  // Geocoding succeeded — now fetch weather separately so render errors don't mask network errors
+  try{
+    const weather=await fetchWeather(loc.lat,loc.lon);
+    state.coords=loc; state.weather=weather; state.manualWaterTemp=null;
+    document.getElementById('waterTempInput').value='';
+    setStatus('');
+  }catch(e){
+    console.error('Weather fetch failed:', e);
+    setStatus('Could not load weather data. Check your connection and try again.', true);
+    btn.disabled=false; return;
+  }
+  try{
+    renderScore(); persist();
+  }catch(e){
+    console.error('Render error:', e);
+    setStatus('Data loaded but display error: '+e.message, true);
+  }
+  btn.disabled=false;
 }
 document.getElementById('searchBtn').addEventListener('click', ()=>runSearch());
 document.getElementById('locInput').addEventListener('keydown', e=>{ if(e.key==='Enter') runSearch(); });
