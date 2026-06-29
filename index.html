@@ -9,6 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Contour" />
 <link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="apple-touch-icon" href="icon-192.png" />
 <title>Contour — Freshwater Bite Forecast</title>
 <style>
@@ -243,6 +245,18 @@
 
   /* export toolbar */
   .toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px;}
+
+  /* Map picker modal */
+  .map-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(10,22,23,0.92);flex-direction:column;}
+  .map-modal.open{display:flex;}
+  .map-modal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;}
+  .map-modal-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;}
+  .map-modal-hint{font-size:12px;color:var(--mist-dim);margin-top:2px;}
+  #leafletMap{flex:1;min-height:0;}
+  .map-modal-footer{display:flex;align-items:center;gap:10px;padding:12px 18px;background:var(--surface);border-top:1px solid var(--line);flex-shrink:0;}
+  .map-pin-coords{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--mist-dim);flex:1;}
+  .map-confirm-btn{background:var(--amber);color:#122C2E;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;border:none;border-radius:10px;padding:10px 20px;cursor:pointer;opacity:0.4;pointer-events:none;}
+  .map-confirm-btn.ready{opacity:1;pointer-events:auto;}
 </style>
 </head>
 <body>
@@ -263,6 +277,7 @@
       <div class="field-row">
         <input type="text" id="locInput" placeholder="Lake, town, or zip" />
         <button class="btn-icon" id="gpsBtn" title="Use my location">📍</button>
+        <button class="btn-icon" id="mapPickerBtn" title="Pick on map">🗺</button>
         <button class="btn-primary" id="searchBtn">Check</button>
       </div>
       <div class="location-result" id="locResult"></div>
@@ -539,6 +554,24 @@
   </div>
 
 </div><!-- /wrap -->
+
+<!-- Map picker modal (full-screen) -->
+<div class="map-modal" id="mapModal" role="dialog" aria-modal="true" aria-label="Pick location on map">
+  <div style="display:flex;flex-direction:column;height:100%;width:100%;max-width:640px;margin:0 auto;">
+    <div class="map-modal-header">
+      <div>
+        <div class="map-modal-title">🗺 Pick a Location</div>
+        <div class="map-modal-hint">Tap anywhere on the map to drop a pin</div>
+      </div>
+      <button id="mapModalClose" style="background:none;border:none;color:var(--mist);font-size:22px;cursor:pointer;padding:4px 8px;">✕</button>
+    </div>
+    <div id="leafletMap"></div>
+    <div class="map-modal-footer">
+      <div class="map-pin-coords" id="mapPinCoords">Tap the map to place a pin</div>
+      <button class="map-confirm-btn" id="mapConfirmBtn">Use This Spot</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ============================================================
@@ -1990,6 +2023,66 @@ if('serviceWorker' in navigator){
 // ============================================================
 loadData();
 renderSpotsList();
+
+// ============================================================
+//  MAP PICKER
+// ============================================================
+(function(){
+  const modal   = document.getElementById('mapModal');
+  const openBtn = document.getElementById('mapPickerBtn');
+  const closeBtn= document.getElementById('mapModalClose');
+  const confirmBtn = document.getElementById('mapConfirmBtn');
+  const coordsEl  = document.getElementById('mapPinCoords');
+
+  let map = null, marker = null, pickedLat = null, pickedLon = null;
+
+  function openModal(){
+    modal.classList.add('open');
+    if(!map){
+      // Init Leaflet centered on Chicago area (good default for IL user)
+      map = L.map('leafletMap').setView([42.0, -88.0], 10);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        maxZoom:19
+      }).addTo(map);
+
+      // Custom amber pin icon
+      const pinIcon = L.divIcon({
+        html:`<div style="width:22px;height:22px;background:var(--amber);border:3px solid #122C2E;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,0.5);"></div>`,
+        iconSize:[22,22], iconAnchor:[11,22], className:''
+      });
+
+      map.on('click', e => {
+        pickedLat = +e.latlng.lat.toFixed(6);
+        pickedLon = +e.latlng.lng.toFixed(6);
+        if(marker) marker.setLatLng(e.latlng);
+        else marker = L.marker(e.latlng, {icon: pinIcon}).addTo(map);
+        coordsEl.textContent = `📍 ${pickedLat}, ${pickedLon}`;
+        confirmBtn.classList.add('ready');
+      });
+    }
+    // If we have a current location, fly there
+    if(state.coords) map.setView([state.coords.lat, state.coords.lon], 13);
+    setTimeout(() => map.invalidateSize(), 50);
+  }
+
+  function closeModal(){ modal.classList.remove('open'); }
+
+  confirmBtn.addEventListener('click', () => {
+    if(pickedLat === null) return;
+    const coords = `${pickedLat}, ${pickedLon}`;
+    document.getElementById('locInput').value = coords;
+    closeModal();
+    runSearch(coords);
+  });
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  // Close on backdrop tap (outside the modal card)
+  modal.addEventListener('click', e => { if(e.target === modal) closeModal(); });
+  // Keyboard escape
+  document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+})();
 </script>
 </body>
 </html>
