@@ -1,0 +1,14 @@
+{
+  "name": "Contour — Freshwater Bite Forecast",
+  "short_name": "Contour",
+  "description": "Freshwater fishing bite forecast and spot tracker for bass, walleye, salmon, and trout.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#122C2E",
+  "theme_color": "#122C2E",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Contour — Freshwater Bite Forecast & Spot Tracker</title>
+<meta name="theme-color" content="#122C2E" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Contour" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<title>Contour — Freshwater Bite Forecast</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
@@ -35,373 +41,142 @@
     min-height:100vh;
     -webkit-font-smoothing:antialiased;
   }
-  @media (prefers-reduced-motion: reduce){
-    *{transition:none !important; animation:none !important;}
-  }
-  :focus-visible{outline:2px solid var(--amber); outline-offset:2px;}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+  :focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
-  /* ---- layout ---- */
-  .wrap{max-width:520px; margin:0 auto; padding:28px 18px 80px;}
+  .wrap{max-width:520px;margin:0 auto;padding:28px 18px 80px;}
 
-  .eyebrow{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    letter-spacing:0.14em;
-    text-transform:uppercase;
-    color:var(--mist-dim);
-    margin:0 0 2px;
-  }
-  h1{
-    font-family:'Space Grotesk',sans-serif;
-    font-weight:700;
-    font-size:32px;
-    margin:0 0 6px;
-    letter-spacing:-0.01em;
-  }
-  h2{
-    font-family:'Space Grotesk',sans-serif;
-    font-weight:700;
-    font-size:17px;
-    margin:0 0 12px;
-    letter-spacing:-0.01em;
-  }
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--mist-dim);margin:0 0 2px;}
+  h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:32px;margin:0 0 6px;letter-spacing:-0.01em;}
+  h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;margin:0 0 12px;letter-spacing:-0.01em;}
 
-  /* ---- tabs ---- */
-  .tabs{
-    display:flex; gap:4px;
-    background:var(--surface);
-    border:1px solid var(--line);
-    border-radius:12px;
-    padding:4px;
-    margin-bottom:16px;
-  }
-  .tab{
-    flex:1; text-align:center;
-    font-family:'Space Grotesk',sans-serif;
-    font-weight:700;
-    font-size:13px;
-    padding:8px 4px;
-    border-radius:9px;
-    cursor:pointer;
-    background:transparent;
-    border:none;
-    color:var(--mist-dim);
-    transition:background 0.15s, color 0.15s;
-  }
-  .tab.active{
-    background:var(--amber);
-    color:var(--deep);
-  }
+  /* tabs */
+  .tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:16px;}
+  .tab{flex:1;text-align:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;padding:8px 4px;border-radius:9px;cursor:pointer;background:transparent;border:none;color:var(--mist-dim);transition:background 0.15s,color 0.15s;}
+  .tab.active{background:var(--amber);color:var(--deep);}
 
-  /* ---- panels ---- */
-  .panel{
-    background:var(--surface);
-    border:1px solid var(--line);
-    border-radius:var(--radius);
-    padding:16px;
-    margin-bottom:14px;
-  }
-  .panel-sm{padding:12px 14px;}
+  /* panels */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px;}
 
-  .field-row{display:flex; gap:8px;}
-  input[type="text"], input[type="number"], select, textarea{
-    flex:1;
-    background:var(--surface-2);
-    border:1px solid var(--line);
-    color:var(--mist);
-    font-family:'Inter',sans-serif;
-    font-size:15px;
-    padding:10px 12px;
-    border-radius:10px;
+  /* inputs */
+  input[type="text"],input[type="number"],input[type="date"],select,textarea{
+    flex:1;background:var(--surface-2);border:1px solid var(--line);color:var(--mist);
+    font-family:'Inter',sans-serif;font-size:15px;padding:10px 12px;border-radius:10px;
+    -webkit-appearance:none;appearance:none;
   }
-  select option{background:var(--surface-2); color:var(--mist);}
-  textarea{resize:vertical; min-height:64px; font-size:14px;}
-  input::placeholder, textarea::placeholder{color:var(--mist-dim);}
-  button{
-    font-family:'Space Grotesk',sans-serif;
-    font-weight:700;
-    font-size:14px;
-    cursor:pointer;
-    border:none;
-    border-radius:10px;
-    transition:opacity 0.12s;
-  }
-  .btn-primary{
-    background:var(--amber);
-    color:var(--deep);
-    padding:10px 16px;
-  }
-  .btn-primary:disabled{opacity:0.5; cursor:default;}
-  .btn-ghost{
-    background:transparent;
-    color:var(--mist-dim);
-    border:1px solid var(--line);
-    padding:8px 12px;
-    font-size:13px;
-  }
-  .btn-moss{
-    background:var(--moss);
-    color:var(--mist);
-    padding:10px 16px;
-  }
-  .btn-danger{
-    background:transparent;
-    color:var(--rust);
-    border:1px solid rgba(162,80,60,0.35);
-    padding:6px 10px;
-    font-size:12px;
-  }
+  input[type="date"]{color-scheme:dark;}
+  select option{background:var(--surface-2);color:var(--mist);}
+  textarea{resize:vertical;min-height:64px;font-size:14px;}
+  input::placeholder,textarea::placeholder{color:var(--mist-dim);}
 
-  .species-toggle{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;}
-  .species-toggle button{
-    flex:1;
-    min-width:70px;
-    background:var(--surface-2);
-    color:var(--mist-dim);
-    padding:9px 0;
-    border:1px solid var(--line);
-    font-size:13px;
-  }
-  .species-toggle button.active{
-    background:var(--moss);
-    color:var(--mist);
-    border-color:var(--moss);
-  }
+  /* buttons */
+  button{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;cursor:pointer;border:none;border-radius:10px;transition:opacity 0.12s;}
+  .btn-primary{background:var(--amber);color:var(--deep);padding:10px 16px;}
+  .btn-primary:disabled{opacity:0.5;cursor:default;}
+  .btn-ghost{background:transparent;color:var(--mist-dim);border:1px solid var(--line);padding:8px 12px;font-size:13px;}
+  .btn-moss{background:var(--moss);color:var(--mist);padding:10px 16px;}
+  .btn-teal{background:var(--teal);color:var(--deep);padding:10px 14px;font-size:13px;}
+  .btn-danger{background:transparent;color:var(--rust);border:1px solid rgba(162,80,60,0.35);padding:6px 10px;font-size:12px;}
+  .btn-icon{background:var(--surface-2);border:1px solid var(--line);color:var(--mist-dim);padding:10px 13px;font-size:18px;line-height:1;}
 
-  .location-result{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:12px;
-    color:var(--mist-dim);
-    margin-top:8px;
-    min-height:14px;
-  }
+  .field-row{display:flex;gap:8px;align-items:stretch;}
 
-  /* ---- bite meter ---- */
-  .meter-panel{display:flex; flex-direction:column; align-items:center; padding:22px 16px 10px;}
-  .meter-wrap{position:relative; width:220px; height:220px;}
-  .meter-center{
-    position:absolute; inset:0;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-  }
-  .meter-score{
-    font-family:'Space Grotesk',sans-serif;
-    font-weight:700;
-    font-size:54px;
-    line-height:1;
-  }
-  .meter-label{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:12px;
-    letter-spacing:0.06em;
-    text-transform:uppercase;
-    color:var(--mist-dim);
-    margin-top:4px;
-    text-align:center;
-    max-width:140px;
-  }
-  .meter-why{
-    font-size:13.5px;
-    color:var(--mist-dim);
-    text-align:center;
-    margin-top:14px;
-    line-height:1.5;
-    max-width:360px;
-  }
+  /* species toggle */
+  .species-toggle{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .species-toggle button{flex:1;min-width:70px;background:var(--surface-2);color:var(--mist-dim);padding:9px 0;border:1px solid var(--line);font-size:13px;}
+  .species-toggle button.active{background:var(--moss);color:var(--mist);border-color:var(--moss);}
 
-  /* ---- factor cards ---- */
-  .factor{
-    display:flex; gap:12px; align-items:flex-start;
-    padding:13px 0;
-    border-top:1px solid var(--line);
-  }
+  .location-result{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--mist-dim);margin-top:8px;min-height:14px;}
+
+  /* meter */
+  .meter-panel{display:flex;flex-direction:column;align-items:center;padding:22px 16px 10px;}
+  .meter-wrap{position:relative;width:220px;height:220px;}
+  .meter-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .meter-score{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:54px;line-height:1;}
+  .meter-label{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist-dim);margin-top:4px;text-align:center;max-width:140px;}
+  .meter-why{font-size:13.5px;color:var(--mist-dim);text-align:center;margin-top:14px;line-height:1.5;max-width:360px;}
+
+  /* factors */
+  .factor{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--line);}
   .factor:first-child{border-top:none;}
-  .factor-icon{
-    width:30px; height:30px; flex-shrink:0;
-    display:flex; align-items:center; justify-content:center;
-    color:var(--amber);
-  }
-  .factor-body{flex:1; min-width:0;}
-  .factor-top{display:flex; justify-content:space-between; align-items:baseline; gap:8px;}
-  .factor-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14.5px;}
-  .factor-value{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--mist-dim); white-space:nowrap;}
-  .factor-detail{font-size:13px; color:var(--mist-dim); margin-top:3px; line-height:1.45;}
-  .factor-bar{height:4px; background:var(--surface-2); border-radius:2px; margin-top:8px; overflow:hidden;}
-  .factor-bar-fill{height:100%; border-radius:2px; transition:width 0.4s ease;}
+  .factor-icon{width:30px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--amber);}
+  .factor-body{flex:1;min-width:0;}
+  .factor-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .factor-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;}
+  .factor-value{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--mist-dim);white-space:nowrap;}
+  .factor-detail{font-size:13px;color:var(--mist-dim);margin-top:3px;line-height:1.45;}
+  .factor-bar{height:4px;background:var(--surface-2);border-radius:2px;margin-top:8px;overflow:hidden;}
+  .factor-bar-fill{height:100%;border-radius:2px;transition:width 0.4s ease;}
 
   details{margin-top:6px;}
-  summary{
-    cursor:pointer;
-    font-family:'IBM Plex Mono',monospace;
-    font-size:12px;
-    letter-spacing:0.04em;
-    color:var(--mist-dim);
-    padding:4px 0;
-  }
-  .override-grid{display:flex; gap:8px; margin-top:10px; align-items:center;}
-  .override-grid label{font-size:13px; color:var(--mist-dim); flex-shrink:0;}
+  summary{cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.04em;color:var(--mist-dim);padding:4px 0;}
+  .override-grid{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  .override-grid label{font-size:13px;color:var(--mist-dim);flex-shrink:0;}
 
-  /* ---- spot cards ---- */
-  .spot-card{
-    background:var(--surface-2);
-    border:1px solid var(--line);
-    border-radius:12px;
-    padding:14px;
-    margin-bottom:10px;
-    position:relative;
-  }
-  .spot-card.recommended{
-    border-color:var(--amber);
-    box-shadow:0 0 0 1px var(--amber);
-  }
-  .spot-header{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;}
-  .spot-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px;}
-  .spot-badge{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:10px;
-    letter-spacing:0.08em;
-    text-transform:uppercase;
-    background:var(--amber);
-    color:var(--deep);
-    padding:3px 7px;
-    border-radius:5px;
-    white-space:nowrap;
-    flex-shrink:0;
-  }
+  /* spot / log cards */
+  .spot-card{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;position:relative;}
+  .spot-card.recommended{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber);}
+  .spot-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;}
+  .spot-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;}
+  .spot-badge{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;background:var(--amber);color:var(--deep);padding:3px 7px;border-radius:5px;white-space:nowrap;flex-shrink:0;}
   .spot-badge.good{background:var(--moss);}
-  .spot-badge.fair{background:var(--surface-3); color:var(--mist-dim);}
-  .spot-meta{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    color:var(--mist-dim);
-    display:flex; flex-wrap:wrap; gap:8px;
-    margin-bottom:6px;
-  }
-  .spot-species{
-    display:flex; flex-wrap:wrap; gap:4px;
-    margin-bottom:8px;
-  }
-  .species-chip{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    padding:3px 7px;
-    border-radius:5px;
-    background:var(--moss-dim);
-    color:var(--mist);
-  }
-  .spot-why{font-size:13px; color:var(--mist-dim); line-height:1.5;}
-  .spot-actions{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;}
-  .spot-score{
-    font-family:'Space Grotesk',sans-serif;
-    font-weight:700;
-    font-size:22px;
-    color:var(--amber);
-  }
+  .spot-badge.fair{background:var(--surface-3);color:var(--mist-dim);}
+  .spot-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist-dim);display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+  .spot-species{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;}
+  .species-chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 7px;border-radius:5px;background:var(--moss-dim);color:var(--mist);}
+  .spot-why{font-size:13px;color:var(--mist-dim);line-height:1.5;}
+  .spot-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center;}
+  .spot-score{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:var(--amber);}
 
-  /* ---- log entries ---- */
-  .log-entry{
-    background:var(--surface-2);
-    border:1px solid var(--line);
-    border-radius:12px;
-    padding:14px;
-    margin-bottom:10px;
-  }
-  .log-header{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:4px;}
-  .log-spot{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;}
-  .log-date{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--mist-dim);}
-  .log-detail{font-size:13px; color:var(--mist-dim); line-height:1.5;}
-  .log-species-chip{
-    display:inline-block;
-    font-family:'IBM Plex Mono',monospace;
-    font-size:10px;
-    padding:2px 6px;
-    border-radius:4px;
-    background:var(--moss-dim);
-    color:var(--mist);
-    margin-right:4px;
-  }
-  .log-catch{color:var(--amber); font-weight:600; font-size:13px;}
+  .log-entry{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;}
+  .log-header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px;}
+  .log-spot{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;}
+  .log-date{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist-dim);}
+  .log-detail{font-size:13px;color:var(--mist-dim);line-height:1.5;}
+  .log-species-chip{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 6px;border-radius:4px;background:var(--moss-dim);color:var(--mist);margin-right:4px;}
+  .log-catch{color:var(--amber);font-weight:600;font-size:13px;}
 
-  /* ---- form section ---- */
-  .form-row{display:flex; flex-direction:column; gap:6px; margin-bottom:12px;}
-  .form-row label{font-size:13px; color:var(--mist-dim);}
-  .form-2col{display:flex; gap:8px;}
-  .form-2col > *{flex:1;}
+  /* forms */
+  .form-row{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+  .form-row label{font-size:13px;color:var(--mist-dim);}
+  .form-2col{display:flex;gap:8px;}
+  .form-2col>*{flex:1;min-width:0;}
+  .checkbox-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .checkbox-row label{font-size:13px;color:var(--mist-dim);cursor:pointer;display:flex;align-items:center;gap:5px;}
+  input[type="checkbox"]{width:16px;height:16px;accent-color:var(--moss);cursor:pointer;flex-shrink:0;}
 
-  .checkbox-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
-  .checkbox-row label{font-size:13px; color:var(--mist-dim); cursor:pointer; display:flex; align-items:center; gap:5px;}
-  input[type="checkbox"]{width:16px; height:16px; accent-color:var(--moss); cursor:pointer; flex-shrink:0;}
+  .struct-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .struct-btn{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;border-radius:7px;background:var(--surface-2);color:var(--mist-dim);border:1px solid var(--line);cursor:pointer;}
+  .struct-btn.active{background:var(--teal);color:var(--deep);border-color:var(--teal);}
 
-  /* ---- structure type ---- */
-  .struct-grid{display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;}
-  .struct-btn{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:12px;
-    padding:6px 10px;
-    border-radius:7px;
-    background:var(--surface-2);
-    color:var(--mist-dim);
-    border:1px solid var(--line);
-    cursor:pointer;
-  }
-  .struct-btn.active{
-    background:var(--teal);
-    color:var(--deep);
-    border-color:var(--teal);
-  }
+  .depth-row{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
+  .depth-chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 9px;border-radius:7px;background:var(--surface-2);border:1px solid var(--line);color:var(--mist-dim);cursor:pointer;transition:background 0.12s,color 0.12s;}
+  .depth-chip.active{background:var(--teal);color:var(--deep);border-color:var(--teal);}
 
-  /* ---- depth heatmap ---- */
-  .depth-row{display:flex; gap:4px; align-items:center; flex-wrap:wrap;}
-  .depth-chip{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    padding:5px 9px;
-    border-radius:7px;
-    background:var(--surface-2);
-    border:1px solid var(--line);
-    color:var(--mist-dim);
-    cursor:pointer;
-    transition:background 0.12s, color 0.12s;
-  }
-  .depth-chip.active{
-    background:var(--teal);
-    color:var(--deep);
-    border-color:var(--teal);
-  }
+  /* filter bar */
+  .filter-bar{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .filter-chip{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:5px 10px;border-radius:7px;background:var(--surface-2);border:1px solid var(--line);color:var(--mist-dim);cursor:pointer;}
+  .filter-chip.active{background:var(--moss);color:var(--mist);border-color:var(--moss);}
 
-  /* ---- recommend badge ---- */
-  .rec-top{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    letter-spacing:0.08em;
-    text-transform:uppercase;
-    color:var(--amber);
-    margin-bottom:8px;
-    display:flex;
-    align-items:center;
-    gap:6px;
-  }
+  /* stats bar */
+  .stats-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+  .stat-box{flex:1;min-width:90px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;text-align:center;}
+  .stat-num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:var(--amber);}
+  .stat-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist-dim);margin-top:2px;}
+
+  /* rec header */
+  .rec-top{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
   .rec-top::before{content:'★';}
 
-  .empty-state{
-    text-align:center;
-    padding:32px 16px;
-    color:var(--mist-dim);
-    font-size:14px;
-    line-height:1.7;
-  }
-  .empty-state .big{font-size:32px; display:block; margin-bottom:8px;}
+  .empty-state{text-align:center;padding:32px 16px;color:var(--mist-dim);font-size:14px;line-height:1.7;}
+  .empty-state .big{font-size:32px;display:block;margin-bottom:8px;}
 
-  .footer-note{
-    font-size:12px;
-    color:var(--mist-dim);
-    line-height:1.6;
-    margin-top:18px;
-    padding-top:14px;
-    border-top:1px solid var(--line);
-  }
-  .status{font-size:13px; color:var(--mist-dim); padding:6px 0;}
+  .footer-note{font-size:12px;color:var(--mist-dim);line-height:1.6;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);}
+  .status{font-size:13px;color:var(--mist-dim);padding:6px 0;}
   .status.error{color:#D98C7A;}
-  .divider{height:1px; background:var(--line); margin:12px 0;}
+
+  /* export toolbar */
+  .toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px;}
 </style>
 </head>
 <body>
@@ -416,15 +191,16 @@
     <button class="tab" id="tabLog">Trip Log</button>
   </div>
 
-  <!-- =================== FORECAST TAB =================== -->
+  <!-- ========== FORECAST TAB ========== -->
   <div id="pageForecast">
     <div class="panel">
       <div class="field-row">
         <input type="text" id="locInput" placeholder="Lake, town, or zip" />
+        <button class="btn-icon" id="gpsBtn" title="Use my location">📍</button>
         <button class="btn-primary" id="searchBtn">Check</button>
       </div>
       <div class="location-result" id="locResult"></div>
-      <div class="species-toggle" id="speciesToggle">
+      <div class="species-toggle">
         <button id="btnBass" class="active">Bass</button>
         <button id="btnWalleye">Walleye</button>
         <button id="btnSalmon">Salmon</button>
@@ -445,7 +221,7 @@
             </linearGradient>
           </defs>
           <circle cx="110" cy="110" r="86" fill="none" stroke="#214548" stroke-width="13"/>
-          <circle id="ringTrack" cx="110" cy="110" r="86" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6"/>
+          <circle cx="110" cy="110" r="86" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6"/>
           <circle id="ringProgress" cx="110" cy="110" r="86" fill="none" stroke="url(#ringGrad)" stroke-width="13"
             stroke-linecap="round" transform="rotate(-90 110 110)" stroke-dasharray="540.35" stroke-dashoffset="540.35"/>
           <g id="fishMarker">
@@ -460,7 +236,6 @@
       <div class="meter-why" id="scoreWhy"></div>
     </div>
 
-    <!-- Recommended spots for current conditions -->
     <div id="conditionSpotsPanel" style="display:none;">
       <div class="rec-top">Best Spots Right Now</div>
       <div id="conditionSpotsList"></div>
@@ -479,16 +254,13 @@
     </div>
 
     <div class="footer-note">
-      Weather, wind, and pressure trend come from Open‑Meteo's public forecast data. Water temperature is a rough
-      estimate from recent air temperature unless you enter a real reading above. Moon phase is calculated locally.
-      Spot recommendations come from your saved spots — add them in the <strong>My Spots</strong> tab.
+      Weather, wind, and pressure from Open‑Meteo. Water temp is estimated from recent air temp unless you enter a reading above.
+      Moon phase is calculated locally. Add spots in <strong>My Spots</strong> to see ranked recommendations here.
     </div>
   </div>
 
-  <!-- =================== SPOTS TAB =================== -->
+  <!-- ========== SPOTS TAB ========== -->
   <div id="pageSpots" style="display:none;">
-
-    <!-- Add spot form -->
     <div class="panel">
       <h2 id="spotFormTitle">Add a Spot</h2>
 
@@ -504,17 +276,20 @@
 
       <div class="form-2col" style="margin-bottom:12px;">
         <div class="form-row" style="margin-bottom:0;">
-          <label>Lat (optional)</label>
-          <input type="number" id="spotLat" placeholder="44.123" step="any" />
+          <label>Latitude</label>
+          <div class="field-row" style="gap:4px;">
+            <input type="number" id="spotLat" placeholder="44.123" step="any" />
+            <button class="btn-icon" id="spotGpsBtn" title="Use my location" style="padding:10px 11px;font-size:16px;">📍</button>
+          </div>
         </div>
         <div class="form-row" style="margin-bottom:0;">
-          <label>Lon (optional)</label>
+          <label>Longitude</label>
           <input type="number" id="spotLon" placeholder="-88.456" step="any" />
         </div>
       </div>
 
       <div class="form-row">
-        <label>Target species (pick all that apply)</label>
+        <label>Target species</label>
         <div class="checkbox-row">
           <label><input type="checkbox" class="spotSpecies" value="bass"> Bass</label>
           <label><input type="checkbox" class="spotSpecies" value="walleye"> Walleye</label>
@@ -553,25 +328,34 @@
       </div>
 
       <div class="form-row">
-        <label>Best conditions (notes)</label>
-        <textarea id="spotNotes" placeholder="e.g. fires when water temps above 62°F, best at dawn on calm mornings, good after a front…"></textarea>
+        <label>Best conditions / notes</label>
+        <textarea id="spotNotes" placeholder="e.g. fires when water temps above 62°F, best at dawn on calm mornings…"></textarea>
       </div>
 
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn-moss" id="saveSpotBtn">Save Spot</button>
         <button class="btn-ghost" id="cancelSpotBtn" style="display:none;">Cancel Edit</button>
       </div>
       <div id="spotFormStatus" class="status" style="margin-top:6px;"></div>
     </div>
 
-    <!-- Saved spots list -->
+    <!-- Filter + export -->
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+      <div class="filter-bar" id="spotsFilter" style="margin-bottom:0;">
+        <button class="filter-chip active" data-filter="all">All</button>
+        <button class="filter-chip" data-filter="bass">Bass</button>
+        <button class="filter-chip" data-filter="walleye">Walleye</button>
+        <button class="filter-chip" data-filter="salmon">Salmon</button>
+        <button class="filter-chip" data-filter="trout">Trout</button>
+      </div>
+      <button class="btn-ghost" id="exportBtn" style="font-size:12px;padding:6px 10px;">⬇ Export</button>
+    </div>
+
     <div id="spotsList"></div>
   </div>
 
-  <!-- =================== LOG TAB =================== -->
+  <!-- ========== LOG TAB ========== -->
   <div id="pageLog" style="display:none;">
-
-    <!-- Add log entry -->
     <div class="panel">
       <h2>Log a Trip</h2>
 
@@ -585,7 +369,7 @@
       <div class="form-2col" style="margin-bottom:12px;">
         <div class="form-row" style="margin-bottom:0;">
           <label>Date</label>
-          <input type="text" id="logDate" placeholder="e.g. 2026-06-29" />
+          <input type="date" id="logDate" />
         </div>
         <div class="form-row" style="margin-bottom:0;">
           <label>Time of day</label>
@@ -624,14 +408,16 @@
 
       <div class="form-row">
         <label>What worked (bait, technique, depth…)</label>
-        <textarea id="logNotes" placeholder="e.g. drop shot on the north weed edge at 12 ft, slow roll spinnerbait after cloud cover moved in…"></textarea>
+        <textarea id="logNotes" placeholder="e.g. drop shot at 12 ft on the north weed edge…"></textarea>
       </div>
 
       <button class="btn-moss" id="saveLogBtn">Save Trip</button>
       <div id="logFormStatus" class="status" style="margin-top:6px;"></div>
     </div>
 
-    <!-- Log list -->
+    <!-- Stats -->
+    <div id="statsArea"></div>
+
     <div id="logList"></div>
   </div>
 
@@ -639,41 +425,38 @@
 
 <script>
 // ============================================================
-//  STATE & STORAGE
+//  STATE
 // ============================================================
-let state = {
-  species: 'bass',
-  coords: null,
-  weather: null,
-  manualWaterTemp: null,
-};
-
+let state = { species:'bass', coords:null, weather:null, manualWaterTemp:null };
 let spots = [];
 let trips = [];
 let editingSpotId = null;
 let selectedStructures = [];
 let selectedDepth = null;
+let activeSpotFilter = 'all';
 
 const RING_CIRC = 2 * Math.PI * 86;
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
 
-function clamp(v,min,max){ return Math.max(min, Math.min(max,v)); }
-
-function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2); }
-
-// ---- local persistence (localStorage fallback for demo) ----
+// ============================================================
+//  PERSISTENCE
+// ============================================================
 function persist(){
   try{
     localStorage.setItem('contour:spots', JSON.stringify(spots));
     localStorage.setItem('contour:trips', JSON.stringify(trips));
-    localStorage.setItem('contour:prefs', JSON.stringify({ location: document.getElementById('locInput').value, species: state.species }));
+    localStorage.setItem('contour:prefs', JSON.stringify({
+      location: document.getElementById('locInput').value,
+      species: state.species
+    }));
   }catch(e){}
 }
 function loadData(){
   try{
-    const s = localStorage.getItem('contour:spots');
-    if(s) spots = JSON.parse(s);
-    const t = localStorage.getItem('contour:trips');
-    if(t) trips = JSON.parse(t);
+    const s = localStorage.getItem('contour:spots'); if(s) spots = JSON.parse(s);
+    const t = localStorage.getItem('contour:trips'); if(t) trips = JSON.parse(t);
     const p = localStorage.getItem('contour:prefs');
     if(p){
       const prefs = JSON.parse(p);
@@ -686,24 +469,16 @@ function loadData(){
 // ============================================================
 //  TABS
 // ============================================================
-const pages = {
-  forecast: document.getElementById('pageForecast'),
-  spots: document.getElementById('pageSpots'),
-  log: document.getElementById('pageLog'),
-};
-const tabs = {
-  forecast: document.getElementById('tabForecast'),
-  spots: document.getElementById('tabSpots'),
-  log: document.getElementById('tabLog'),
-};
+const pages = { forecast: document.getElementById('pageForecast'), spots: document.getElementById('pageSpots'), log: document.getElementById('pageLog') };
+const tabs  = { forecast: document.getElementById('tabForecast'),  spots: document.getElementById('tabSpots'),  log: document.getElementById('tabLog') };
 
 function switchTab(name){
   Object.values(pages).forEach(p=>p.style.display='none');
   Object.values(tabs).forEach(t=>t.classList.remove('active'));
   pages[name].style.display='block';
   tabs[name].classList.add('active');
-  if(name==='spots') renderSpotsList();
-  if(name==='log'){ populateLogSpotSelect(); renderLogList(); }
+  if(name==='spots'){ renderSpotsList(); }
+  if(name==='log'){ populateLogSpotSelect(); renderLogList(); renderStats(); }
 }
 tabs.forecast.addEventListener('click', ()=>switchTab('forecast'));
 tabs.spots.addEventListener('click', ()=>switchTab('spots'));
@@ -712,20 +487,14 @@ tabs.log.addEventListener('click', ()=>switchTab('log'));
 // ============================================================
 //  SPECIES TOGGLE
 // ============================================================
-const speciesButtons = {
-  bass: document.getElementById('btnBass'),
-  walleye: document.getElementById('btnWalleye'),
-  salmon: document.getElementById('btnSalmon'),
-  trout: document.getElementById('btnTrout'),
-};
-
+const speciesBtns = { bass:document.getElementById('btnBass'), walleye:document.getElementById('btnWalleye'), salmon:document.getElementById('btnSalmon'), trout:document.getElementById('btnTrout') };
 function setSpecies(sp, save=true){
   state.species = sp;
-  Object.entries(speciesButtons).forEach(([k,btn])=> btn.classList.toggle('active', k===sp));
+  Object.entries(speciesBtns).forEach(([k,b])=>b.classList.toggle('active',k===sp));
   if(save) persist();
   if(state.weather) renderScore();
 }
-Object.entries(speciesButtons).forEach(([sp, btn])=> btn.addEventListener('click', ()=>setSpecies(sp)));
+Object.entries(speciesBtns).forEach(([sp,btn])=>btn.addEventListener('click',()=>setSpecies(sp)));
 
 // ============================================================
 //  STATUS
@@ -736,578 +505,565 @@ function setStatus(msg, isError=false){
 }
 
 // ============================================================
+//  GPS HELPERS
+// ============================================================
+function getGPS(onSuccess, onError){
+  if(!navigator.geolocation){ onError('GPS not available on this device.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => onSuccess(pos.coords.latitude, pos.coords.longitude),
+    ()  => onError('Could not get location — check browser permissions.'),
+    { timeout:10000 }
+  );
+}
+
+// Forecast GPS — reverse geocode with open-meteo nominatim-style
+document.getElementById('gpsBtn').addEventListener('click', () => {
+  const btn = document.getElementById('gpsBtn');
+  btn.textContent = '⏳';
+  btn.disabled = true;
+  getGPS(async (lat, lon) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+      const data = await res.json();
+      const label = data.address
+        ? [data.address.lake||data.address.reservoir||data.address.city||data.address.town||data.address.village||data.address.county, data.address.state].filter(Boolean).join(', ')
+        : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      document.getElementById('locInput').value = label;
+      // Fetch weather directly by coords
+      const weather = await fetchWeather(lat, lon);
+      state.coords = { lat, lon, label };
+      state.weather = weather;
+      state.manualWaterTemp = null;
+      document.getElementById('locResult').textContent = `📍 ${label}`;
+      setStatus('');
+      renderScore();
+      persist();
+    } catch(e) {
+      // Fall back to coords search
+      document.getElementById('locInput').value = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+      runSearch();
+    } finally {
+      btn.textContent = '📍'; btn.disabled = false;
+    }
+  }, msg => { setStatus(msg, true); btn.textContent='📍'; btn.disabled=false; });
+});
+
+// Spot form GPS
+document.getElementById('spotGpsBtn').addEventListener('click', () => {
+  const btn = document.getElementById('spotGpsBtn');
+  btn.textContent = '⏳'; btn.disabled = true;
+  getGPS((lat, lon) => {
+    document.getElementById('spotLat').value = lat.toFixed(6);
+    document.getElementById('spotLon').value = lon.toFixed(6);
+    btn.textContent = '✓'; btn.disabled = false;
+    setTimeout(()=>{ btn.textContent='📍'; }, 2000);
+  }, msg => { alert(msg); btn.textContent='📍'; btn.disabled=false; });
+});
+
+// ============================================================
 //  MOON PHASE
 // ============================================================
 function moonPhase(date){
-  const synodic = 29.530588853;
+  const syn = 29.530588853;
   const ref = new Date('2000-01-06T18:14:00Z').getTime();
-  const days = (date.getTime() - ref) / 86400000;
-  let phase = (days % synodic) / synodic;
-  if(phase < 0) phase += 1;
-  const illum = (1 - Math.cos(2*Math.PI*phase)) / 2;
+  let phase = ((date.getTime()-ref)/86400000 % syn)/syn;
+  if(phase<0) phase+=1;
+  const illum=(1-Math.cos(2*Math.PI*phase))/2;
   let name;
-  if(phase < 0.03 || phase > 0.97) name = 'New Moon';
-  else if(phase < 0.22) name = 'Waxing Crescent';
-  else if(phase < 0.28) name = 'First Quarter';
-  else if(phase < 0.47) name = 'Waxing Gibbous';
-  else if(phase < 0.53) name = 'Full Moon';
-  else if(phase < 0.72) name = 'Waning Gibbous';
-  else if(phase < 0.78) name = 'Last Quarter';
-  else name = 'Waning Crescent';
-  const activity = Math.abs(Math.cos(2*Math.PI*phase));
-  return { phase, illum, name, activity };
+  if(phase<0.03||phase>0.97) name='New Moon';
+  else if(phase<0.22) name='Waxing Crescent';
+  else if(phase<0.28) name='First Quarter';
+  else if(phase<0.47) name='Waxing Gibbous';
+  else if(phase<0.53) name='Full Moon';
+  else if(phase<0.72) name='Waning Gibbous';
+  else if(phase<0.78) name='Last Quarter';
+  else name='Waning Crescent';
+  return { phase, illum, name, activity:Math.abs(Math.cos(2*Math.PI*phase)) };
 }
 
 // ============================================================
 //  GEOCODE + WEATHER
 // ============================================================
 async function geocode(query){
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('geocode failed');
-  const data = await res.json();
-  if(!data.results || !data.results.length) throw new Error('no match');
-  const r = data.results[0];
-  return { lat:r.latitude, lon:r.longitude, label:[r.name, r.admin1, r.country_code].filter(Boolean).join(', ') };
+  const url=`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
+  const res=await fetch(url); if(!res.ok) throw new Error('geocode failed');
+  const data=await res.json();
+  if(!data.results||!data.results.length) throw new Error('no match');
+  const r=data.results[0];
+  return { lat:r.latitude, lon:r.longitude, label:[r.name,r.admin1,r.country_code].filter(Boolean).join(', ') };
 }
-
-async function fetchWeather(lat, lon){
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,pressure_msl` +
-    `&hourly=pressure_msl,temperature_2m` +
-    `&daily=sunrise,sunset` +
+async function fetchWeather(lat,lon){
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,pressure_msl`+
+    `&hourly=pressure_msl,temperature_2m`+
+    `&daily=sunrise,sunset`+
     `&past_days=2&forecast_days=1&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('weather fetch failed');
+  const res=await fetch(url); if(!res.ok) throw new Error('weather failed');
   return res.json();
 }
-
-function pressureTrend(weather){
-  const times = weather.hourly.time;
-  const pressures = weather.hourly.pressure_msl;
-  const nowIso = weather.current.time;
-  let idx = times.indexOf(nowIso);
-  if(idx === -1) idx = times.length - 1;
-  const lookback = Math.min(6, idx);
-  if(lookback < 1) return { slope:0, current: pressures[idx] };
-  const slope = (pressures[idx] - pressures[idx-lookback]) / lookback;
-  return { slope, current: pressures[idx] };
+function pressureTrend(w){
+  const times=w.hourly.time, p=w.hourly.pressure_msl;
+  let idx=times.indexOf(w.current.time); if(idx===-1) idx=times.length-1;
+  const lb=Math.min(6,idx);
+  return lb<1?{slope:0,current:p[idx]}:{slope:(p[idx]-p[idx-lb])/lb,current:p[idx]};
 }
-
-function estWaterTemp(weather){
-  const temps = weather.hourly.temperature_2m.filter(t => typeof t === 'number');
-  const avg = temps.reduce((a,b)=>a+b,0) / temps.length;
-  return avg - 4;
+function estWaterTemp(w){
+  const ts=w.hourly.temperature_2m.filter(t=>typeof t==='number');
+  return ts.reduce((a,b)=>a+b,0)/ts.length - 4;
 }
 
 // ============================================================
-//  SCORING ENGINE
+//  SCORING
 // ============================================================
-const WEIGHTS = {
-  bass:    { pressure:0.30, wind:0.20, moon:0.20, temp:0.20, daylight:0.10 },
-  walleye: { pressure:0.25, wind:0.20, moon:0.25, temp:0.20, daylight:0.10 },
-  salmon:  { pressure:0.25, wind:0.15, moon:0.15, temp:0.35, daylight:0.10 },
-  trout:   { pressure:0.25, wind:0.15, moon:0.15, temp:0.35, daylight:0.10 },
+const WEIGHTS={
+  bass:   {pressure:0.30,wind:0.20,moon:0.20,temp:0.20,daylight:0.10},
+  walleye:{pressure:0.25,wind:0.20,moon:0.25,temp:0.20,daylight:0.10},
+  salmon: {pressure:0.25,wind:0.15,moon:0.15,temp:0.35,daylight:0.10},
+  trout:  {pressure:0.25,wind:0.15,moon:0.15,temp:0.35,daylight:0.10},
 };
-
-function pressureScore(slope, current){
-  let base;
-  if(slope <= -0.5) base = 92;
-  else if(slope <= -0.15) base = 80;
-  else if(slope < 0.15) base = 58;
-  else if(slope < 0.5) base = 42;
-  else base = 22;
-  if(current < 1000) base -= 10;
-  if(current > 1025) base -= 8;
-  return clamp(base, 0, 100);
+function pressureScore(slope,current){
+  let b=slope<=-0.5?92:slope<=-0.15?80:slope<0.15?58:slope<0.5?42:22;
+  if(current<1000) b-=10; if(current>1025) b-=8;
+  return clamp(b,0,100);
 }
 function windScore(mph){
-  if(mph < 2) return 50;
-  if(mph <= 10) return 92;
-  if(mph <= 18) return 68;
-  if(mph <= 28) return 45;
-  return 28;
+  return mph<2?50:mph<=10?92:mph<=18?68:mph<=28?45:28;
 }
-
-const SPECIES_TEMP = {
-  bass:    { center:68, upperMult:1.0, lowerMult:1.3 },
-  walleye: { center:62, upperMult:1.4, lowerMult:1.0 },
-  salmon:  { center:54, upperMult:1.8, lowerMult:0.8 },
-  trout:   { center:58, upperMult:1.8, lowerMult:0.8 },
+const SPECIES_TEMP={
+  bass:   {center:68,upperMult:1.0,lowerMult:1.3},
+  walleye:{center:62,upperMult:1.4,lowerMult:1.0},
+  salmon: {center:54,upperMult:1.8,lowerMult:0.8},
+  trout:  {center:58,upperMult:1.8,lowerMult:0.8},
 };
-function tempScoreFn(tempF, species){
-  const cfg = SPECIES_TEMP[species] || SPECIES_TEMP.bass;
-  const diff = tempF - cfg.center;
-  const mult = diff >= 0 ? cfg.upperMult : cfg.lowerMult;
-  return clamp(100 - Math.abs(diff) * mult * 6, 0, 100);
+function tempScore(tempF,sp){
+  const cfg=SPECIES_TEMP[sp]||SPECIES_TEMP.bass;
+  const diff=tempF-cfg.center;
+  return clamp(100-Math.abs(diff)*(diff>=0?cfg.upperMult:cfg.lowerMult)*6,0,100);
 }
-function daylightScore(now, sunrise, sunset){
-  const toMin = d => Math.abs(now - d) / 60000;
-  const nearest = Math.min(toMin(sunrise), toMin(sunset));
-  if(nearest <= 60) return 95;
-  if(nearest <= 120) return 80;
-  const daytime = now > sunrise && now < sunset;
-  return daytime ? 55 : 40;
+function daylightScore(now,sunrise,sunset){
+  const nm=d=>Math.abs(now-d)/60000;
+  const near=Math.min(nm(sunrise),nm(sunset));
+  if(near<=60) return 95; if(near<=120) return 80;
+  return (now>sunrise&&now<sunset)?55:40;
 }
 function compass(deg){
-  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
-  return dirs[Math.round(deg/22.5) % 16];
+  const d=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return d[Math.round(deg/22.5)%16];
 }
-function fmtTime(d){
-  return d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
-}
+function fmtTime(d){ return d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}); }
 
-// ---- species-specific habitat affinity scores per condition ----
-// Returns 0-1 bonus multiplier for a spot given current conditions
-function habitatScore(spot, weatherCtx){
-  const { waterTemp, windMph, pressureSlope, now, sunrise, sunset } = weatherCtx;
-  const sp = spot.species || [];
-  const struct = spot.structure || '';
-  const depth = spot.depth || '';
-  let bonus = 0;
-  let reasons = [];
-
-  // Wind pushes bait toward downwind shores — reward open-water / points
-  if(windMph > 8 && (struct.includes('point') || struct.includes('open water'))){
-    bonus += 0.15; reasons.push('wind pushing bait to this structure');
+function habitatScore(spot, ctx){
+  const {waterTemp,windMph,pressureSlope,now,sunrise,sunset}=ctx;
+  const sp=spot.species||[], struct=spot.structure||'', depth=spot.depth||'';
+  let bonus=0, reasons=[];
+  if(windMph>8&&(struct.includes('point')||struct.includes('open water'))){
+    bonus+=0.15; reasons.push('wind pushing bait to this structure');
   }
-  // Falling pressure rewards cover/weed spots
-  if(pressureSlope < -0.15 && (struct.includes('weed') || struct.includes('timber') || struct.includes('cove'))){
-    bonus += 0.12; reasons.push('pre-front bite — fish pushed shallow cover');
+  if(pressureSlope<-0.15&&(struct.includes('weed')||struct.includes('timber')||struct.includes('cove'))){
+    bonus+=0.12; reasons.push('pre-front bite — fish pushed into shallow cover');
   }
-  // Bass in shallow warm water
-  if(sp.includes('bass') && waterTemp > 60 && waterTemp < 80 && (struct.includes('weed') || struct.includes('flat') || struct.includes('dock'))){
-    bonus += 0.10; reasons.push('bass temp in ideal range for this structure');
+  if(sp.includes('bass')&&waterTemp>60&&waterTemp<80&&(struct.includes('weed')||struct.includes('flat')||struct.includes('dock'))){
+    bonus+=0.10; reasons.push('bass temp in ideal range for this structure');
   }
-  // Walleye — dawn/dusk rocky or sand flats
   if(sp.includes('walleye')){
-    const toMin = d => Math.abs(now - d) / 60000;
-    const nearLight = Math.min(toMin(sunrise), toMin(sunset)) < 120;
-    if(nearLight && (struct.includes('rocky') || struct.includes('sand') || struct.includes('flat'))){
-      bonus += 0.18; reasons.push('walleye prime-light bite on transition structure');
+    const nm=d=>Math.abs(now-d)/60000;
+    if(Math.min(nm(sunrise),nm(sunset))<120&&(struct.includes('rocky')||struct.includes('sand')||struct.includes('flat'))){
+      bonus+=0.18; reasons.push('walleye prime-light bite on transition structure');
     }
   }
-  // Salmon / trout — cold deep water or inlets
-  if((sp.includes('salmon') || sp.includes('trout')) && waterTemp < 65 &&
-     (struct.includes('inlet') || depth.includes('20') || depth.includes('40'))){
-    bonus += 0.15; reasons.push('cold-water species — deep or inflow structure is premium');
+  if((sp.includes('salmon')||sp.includes('trout'))&&waterTemp<65&&(struct.includes('inlet')||depth.includes('20')||depth.includes('40'))){
+    bonus+=0.15; reasons.push('cold-water species — deep or inflow structure is prime');
   }
-  // Trout in current or inlets regardless
-  if(sp.includes('trout') && struct.includes('inlet')){
-    bonus += 0.10; reasons.push('trout holding in current / oxygenated inflow');
+  if(sp.includes('trout')&&struct.includes('inlet')){
+    bonus+=0.10; reasons.push('trout holding in oxygenated inflow');
   }
-
-  return { bonus: clamp(bonus, 0, 0.40), reasons };
+  return { bonus:clamp(bonus,0,0.40), reasons };
 }
 
 function buildFactors(){
-  const w = state.weather;
-  const sp = state.species;
-  const now = new Date(w.current.time);
-  const pt = pressureTrend(w);
-  const wind = w.current.wind_speed_10m;
-  const windDir = w.current.wind_direction_10m;
-  const moon = moonPhase(now);
-  const waterTemp = state.manualWaterTemp !== null ? state.manualWaterTemp : estWaterTemp(w);
-  const sunrise = new Date(w.daily.sunrise[0]);
-  const sunset = new Date(w.daily.sunset[0]);
+  const w=state.weather, sp=state.species;
+  const now=new Date(w.current.time);
+  const pt=pressureTrend(w);
+  const wind=w.current.wind_speed_10m;
+  const windDir=w.current.wind_direction_10m;
+  const moon=moonPhase(now);
+  const waterTemp=state.manualWaterTemp!==null?state.manualWaterTemp:estWaterTemp(w);
+  const sunrise=new Date(w.daily.sunrise[0]);
+  const sunset=new Date(w.daily.sunset[0]);
 
-  const pScore = pressureScore(pt.slope, pt.current);
-  const wScore = windScore(wind);
-  const mScore = 30 + moon.activity * 70;
-  const tScore = tempScoreFn(waterTemp, sp);
-  const dScore = daylightScore(now, sunrise, sunset);
+  const pScore=pressureScore(pt.slope,pt.current);
+  const wScore=windScore(wind);
+  const mScore=30+moon.activity*70;
+  const tScore=tempScore(waterTemp,sp);
+  const dScore=daylightScore(now,sunrise,sunset);
+  const tw=pt.slope<=-0.15?'falling':pt.slope>=0.15?'rising':'steady';
 
-  const trendWord = pt.slope <= -0.15 ? 'falling' : pt.slope >= 0.15 ? 'rising' : 'steady';
-  const trendNote = pt.slope <= -0.5 ? 'dropping fast — often the best feeding window before a front.'
-    : pt.slope <= -0.15 ? 'easing down — fish tend to feed more confidently.'
-    : pt.slope < 0.15 ? 'holding steady — a reliable, if unspectacular, bite.'
-    : pt.slope < 0.5 ? 'climbing — bite often tightens up after a front clears.'
-    : 'climbing fast — post-front bluebird conditions, expect a tougher bite.';
+  const trendNote=pt.slope<=-0.5?'dropping fast — often the best feeding window before a front.'
+    :pt.slope<=-0.15?'easing down — fish tend to feed more confidently.'
+    :pt.slope<0.15?'holding steady — a reliable, if unspectacular, bite.'
+    :pt.slope<0.5?'climbing — bite often tightens after a front clears.'
+    :'climbing fast — post-front bluebird; expect a tougher bite.';
+  const windNote=wind<2?'glassy calm — fish can see you coming, stay stealthy.'
+    :wind<=10?'light ripple — great for breaking up the surface.'
+    :wind<=18?'moderate — still workable, may push bait to the downwind shore.'
+    :wind<=28?'strong — downwind banks can load up with baitfish.'
+    :'very strong — safety first; tight to shore or sit this one out.';
+  const moonNote=moon.activity>0.85?`${moon.name} — historically one of the more active feeding windows.`
+    :moon.activity>0.4?`${moon.name} — moderate lunar pull on activity.`
+    :`${moon.name} — quarter moons are usually the quietest lunar phase.`;
+  const tempNote={
+    bass:waterTemp>80?'hot — bass slide deep or go nocturnal; fish dawn/dusk edges.':waterTemp<55?'cool — bass metabolism is slow, expect a deliberate bite.':'in the range bass feed most aggressively.',
+    walleye:waterTemp>72?'warm — move deeper or fish low-light windows.':waterTemp<48?'cold — walleye bite but slower presentations work better.':'prime walleye temp — rocky structure and transition zones.',
+    salmon:waterTemp>65?'warm — seek thermocline, deep, or cold inflows.':waterTemp<42?'very cold — salmon sluggish; slow-troll or drift bait.':'good salmon temp — suspended bait near structure.',
+    trout:waterTemp>66?'warm — shade, inflows, or deeper cooler water.':waterTemp<48?'cold — trout still feed, expect a slower retrieve.':'right in the window trout feed most actively.',
+  }[sp]||'check water temp for optimal bite window.';
+  const dayNote=dScore>=90?'right in a dawn/dusk window — prime time.'
+    :dScore>=75?'close to first or last light.'
+    :(now>sunrise&&now<sunset)?'broad daylight — a steadier, less explosive bite.'
+    :'after dark — slower for most species, better for walleye.';
 
-  const windNote = wind < 2 ? 'glassy calm — fish can see you coming, stay stealthy.'
-    : wind <= 10 ? 'a light ripple — great for breaking up the surface without making it unfishable.'
-    : wind <= 18 ? 'moderate — still workable, may push bait toward the downwind shore.'
-    : wind <= 28 ? 'strong — tough to fish cleanly, but downwind banks can load up with baitfish.'
-    : 'very strong — safety first; tight to shore or sit this one out.';
-
-  const moonNote = moon.activity > 0.85 ? `${moon.name} — historically one of the more active feeding windows.`
-    : moon.activity > 0.4 ? `${moon.name} — moderate lunar pull on activity.`
-    : `${moon.name} — quarter moons are usually the quietest lunar phase.`;
-
-  const tempNote = {
-    bass: waterTemp > 80 ? 'hot — bass often slide deep or go nocturnal; fish dawn/dusk edges.'
-        : waterTemp < 55 ? 'cool — bass metabolism is slow, expect a more deliberate bite.'
-        : 'in the range bass feed most aggressively.',
-    walleye: waterTemp > 72 ? 'warm for walleye — move deeper or fish low-light windows.'
-        : waterTemp < 48 ? 'cold — walleye still bite but slower presentations work better.'
-        : 'prime walleye temp — classic rocky structure and transition zones.',
-    salmon: waterTemp > 65 ? 'warm for salmon — seek thermocline, deep or cold inflows.'
-        : waterTemp < 42 ? 'very cold — salmon are sluggish, slow-troll or drift bait.'
-        : 'good salmon temp — suspended bait near structure.',
-    trout: waterTemp > 66 ? 'warm for trout — shade, inflows, or deeper cooler water.'
-        : waterTemp < 48 ? 'cold — trout still feed, just expect a slower retrieve.'
-        : 'right in the window trout feed most actively.',
-  }[sp] || 'check water temp for optimal bite window.';
-
-  const dayNote = dScore >= 90 ? 'right in a dawn/dusk window — prime time.'
-    : dScore >= 75 ? 'close to first or last light.'
-    : (now > sunrise && now < sunset) ? 'broad daylight — a steadier, less explosive bite.'
-    : 'after dark — slower for most species, faster for walleye and catfish.';
+  const dayVal=now<sunrise?`sunrise ${fmtTime(sunrise)}`:now<sunset?`sunset ${fmtTime(sunset)}`:`sunrise ${fmtTime(sunrise)}`;
 
   return {
-    factors: [
-      { key:'pressure', name:'Barometric Pressure', icon:'gauge', score:pScore, weight:WEIGHTS[sp].pressure,
-        value:`${pt.current.toFixed(0)} hPa, ${trendWord}`, detail:trendNote },
-      { key:'wind', name:'Wind', icon:'wind', score:wScore, weight:WEIGHTS[sp].wind,
-        value:`${wind.toFixed(0)} mph ${compass(windDir)}`, detail:windNote },
-      { key:'moon', name:'Moon Phase', icon:'moon', score:mScore, weight:WEIGHTS[sp].moon,
-        value:`${Math.round(moon.illum*100)}% illum.`, detail:moonNote },
-      { key:'temp', name:'Water Temp', icon:'temp', score:tScore, weight:WEIGHTS[sp].temp,
-        value:`${waterTemp.toFixed(0)}°F${state.manualWaterTemp !== null ? '' : ' (est.)'}`, detail:tempNote },
-      { key:'daylight', name:'Daylight', icon:'sun', score:dScore, weight:WEIGHTS[sp].daylight,
-        value: now < sunrise ? `sunrise ${fmtTime(sunrise)}` : now < sunset ? `sunset ${fmtTime(sunset)}` : `sunrise ${fmtTime(sunrise)}`,
-        detail:dayNote },
+    factors:[
+      {key:'pressure',name:'Barometric Pressure',icon:'gauge',score:pScore,weight:WEIGHTS[sp].pressure,value:`${pt.current.toFixed(0)} hPa, ${tw}`,detail:trendNote},
+      {key:'wind',name:'Wind',icon:'wind',score:wScore,weight:WEIGHTS[sp].wind,value:`${wind.toFixed(0)} mph ${compass(windDir)}`,detail:windNote},
+      {key:'moon',name:'Moon Phase',icon:'moon',score:mScore,weight:WEIGHTS[sp].moon,value:`${Math.round(moon.illum*100)}% illum.`,detail:moonNote},
+      {key:'temp',name:'Water Temp',icon:'temp',score:tScore,weight:WEIGHTS[sp].temp,value:`${waterTemp.toFixed(0)}°F${state.manualWaterTemp!==null?'':' (est.)'}`,detail:tempNote},
+      {key:'daylight',name:'Daylight',icon:'sun',score:dScore,weight:WEIGHTS[sp].daylight,value:dayVal,detail:dayNote},
     ],
-    weatherCtx: { waterTemp, windMph: wind, pressureSlope: pt.slope, now, sunrise, sunset },
+    weatherCtx:{waterTemp,windMph:wind,pressureSlope:pt.slope,now,sunrise,sunset},
   };
 }
 
-const ICONS = {
-  gauge: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 14a8 8 0 1 1 16 0"/><path d="M12 14l4-4"/><circle cx="12" cy="14" r="1.2" fill="currentColor"/></svg>',
-  wind: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h11a2.5 2.5 0 1 0-2.5-2.5"/><path d="M3 13h15a2.5 2.5 0 1 1-2.5 2.5"/><path d="M3 18h8"/></svg>',
-  moon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>',
-  temp: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 14.5V5a2 2 0 1 0-4 0v9.5a4 4 0 1 0 4 0z"/></svg>',
-  sun: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M4 12H2M22 12h-2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg>',
+const ICONS={
+  gauge:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 14a8 8 0 1 1 16 0"/><path d="M12 14l4-4"/><circle cx="12" cy="14" r="1.2" fill="currentColor"/></svg>',
+  wind:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h11a2.5 2.5 0 1 0-2.5-2.5"/><path d="M3 13h15a2.5 2.5 0 1 1-2.5 2.5"/><path d="M3 18h8"/></svg>',
+  moon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>',
+  temp:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 14.5V5a2 2 0 1 0-4 0v9.5a4 4 0 1 0 4 0z"/></svg>',
+  sun:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M4 12H2M22 12h-2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg>',
 };
-function barColor(score){
-  if(score >= 70) return '#E0A53D';
-  if(score >= 45) return '#C98A45';
-  return '#A2503C';
-}
+function barColor(s){ return s>=70?'#E0A53D':s>=45?'#C98A45':'#A2503C'; }
 
 function renderScore(){
-  const { factors, weatherCtx } = buildFactors();
-  const total = Math.round(factors.reduce((sum,f)=>sum + f.score*f.weight, 0));
+  const {factors, weatherCtx}=buildFactors();
+  const total=Math.round(factors.reduce((s,f)=>s+f.score*f.weight,0));
+  const label=total>=80?'Prime Window':total>=65?'Good Window':total>=50?'Fair — Worth a Trip':total>=35?'Slow Bite Likely':'Tough Conditions';
 
-  let label;
-  if(total >= 80) label = 'Prime Window';
-  else if(total >= 65) label = 'Good Window';
-  else if(total >= 50) label = 'Fair — Worth a Trip';
-  else if(total >= 35) label = 'Slow Bite Likely';
-  else label = 'Tough Conditions';
+  document.getElementById('scoreNum').textContent=total;
+  document.getElementById('scoreLabel').textContent=label;
 
-  document.getElementById('scoreNum').textContent = total;
-  document.getElementById('scoreLabel').textContent = label;
+  const offset=RING_CIRC-(total/100)*RING_CIRC;
+  document.getElementById('ringProgress').setAttribute('stroke-dashoffset',offset);
+  const angle=(total/100)*360-90, rad=angle*Math.PI/180;
+  document.getElementById('fishMarker').setAttribute('transform',
+    `translate(${110+86*Math.cos(rad)} ${110+86*Math.sin(rad)}) rotate(${angle+90})`);
 
-  const offset = RING_CIRC - (total/100)*RING_CIRC;
-  document.getElementById('ringProgress').setAttribute('stroke-dashoffset', offset);
-  const angle = (total/100)*360 - 90;
-  const rad = angle * Math.PI/180;
-  const x = 110 + 86*Math.cos(rad);
-  const y = 110 + 86*Math.sin(rad);
-  document.getElementById('fishMarker').setAttribute('transform', `translate(${x} ${y}) rotate(${angle+90})`);
+  const sorted=[...factors].sort((a,b)=>b.score*b.weight-a.score*a.weight);
+  const best=sorted[0], worst=sorted[sorted.length-1];
+  document.getElementById('scoreWhy').textContent=
+    `${best.name} is working in your favor — ${best.detail}`+
+    (worst.name!==best.name?` ${worst.name} is the main drag — ${worst.detail}`:'');
 
-  const sorted = [...factors].sort((a,b)=> (b.score*b.weight) - (a.score*a.weight));
-  const best = sorted[0], worst = sorted[sorted.length-1];
-  document.getElementById('scoreWhy').textContent =
-    `${best.name} is working in your favor — ${best.detail} ${worst.name.toLowerCase() !== best.name.toLowerCase() ? worst.name + ' is the main drag — ' + worst.detail : ''}`;
-
-  document.getElementById('factorsList').innerHTML = factors.map(f => `
+  document.getElementById('factorsList').innerHTML=factors.map(f=>`
     <div class="factor">
       <div class="factor-icon">${ICONS[f.icon]}</div>
       <div class="factor-body">
-        <div class="factor-top">
-          <span class="factor-name">${f.name}</span>
-          <span class="factor-value">${f.value}</span>
-        </div>
+        <div class="factor-top"><span class="factor-name">${f.name}</span><span class="factor-value">${f.value}</span></div>
         <div class="factor-detail">${f.detail}</div>
-        <div class="factor-bar"><div class="factor-bar-fill" style="width:${f.score}%; background:${barColor(f.score)}"></div></div>
+        <div class="factor-bar"><div class="factor-bar-fill" style="width:${f.score}%;background:${barColor(f.score)}"></div></div>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
-  document.getElementById('meterPanel').style.display = 'flex';
-  document.getElementById('factorsPanel').style.display = 'block';
-
+  document.getElementById('meterPanel').style.display='flex';
+  document.getElementById('factorsPanel').style.display='block';
   renderConditionSpots(weatherCtx, total);
 }
 
 // ============================================================
-//  CONDITION-BASED SPOT RECOMMENDATIONS
+//  CONDITION SPOTS
 // ============================================================
-function scoreSpotForConditions(spot, weatherCtx, baseScore){
-  const sp = state.species;
-  if(spot.species && spot.species.length && !spot.species.includes(sp)) return null;
-  const { bonus, reasons } = habitatScore(spot, weatherCtx);
-  const combined = Math.round(Math.min(100, baseScore * (1 + bonus)));
-  return { spot, combined, reasons };
-}
-
-function renderConditionSpots(weatherCtx, baseScore){
-  const panel = document.getElementById('conditionSpotsPanel');
-  const list = document.getElementById('conditionSpotsList');
+function renderConditionSpots(ctx, base){
+  const panel=document.getElementById('conditionSpotsPanel');
+  const list=document.getElementById('conditionSpotsList');
   if(!spots.length){ panel.style.display='none'; return; }
-
-  const scored = spots
-    .map(s => scoreSpotForConditions(s, weatherCtx, baseScore))
-    .filter(Boolean)
-    .sort((a,b)=>b.combined - a.combined)
-    .slice(0, 5);
-
+  const sp=state.species;
+  const scored=spots
+    .filter(s=>!s.species||!s.species.length||s.species.includes(sp))
+    .map(s=>{ const {bonus,reasons}=habitatScore(s,ctx); return {spot:s,combined:Math.round(Math.min(100,base*(1+bonus))),reasons}; })
+    .sort((a,b)=>b.combined-a.combined).slice(0,5);
   if(!scored.length){ panel.style.display='none'; return; }
-
   panel.style.display='block';
-  list.innerHTML = scored.map((item, i) => {
-    const { spot, combined, reasons } = item;
-    const badgeClass = combined >= 70 ? '' : combined >= 50 ? 'good' : 'fair';
-    const badgeText = combined >= 70 ? 'Prime' : combined >= 50 ? 'Good' : 'Fair';
+  list.innerHTML=scored.map((item,i)=>{
+    const {spot,combined,reasons}=item;
+    const bc=combined>=70?'':combined>=50?'good':'fair';
+    const bt=combined>=70?'Prime':combined>=50?'Good':'Fair';
+    const mapLink=spot.lat&&spot.lon
+      ?`<a href="https://maps.google.com/?q=${spot.lat},${spot.lon}" target="_blank" rel="noopener" style="font-size:12px;color:var(--teal);text-decoration:none;">🗺 Map</a>` : '';
+    const fishBtn=spot.lake
+      ?`<button class="btn-ghost" style="font-size:12px;padding:5px 9px;" onclick="fishThisSpot('${esc(spot.lake)}')">⚡ Forecast</button>` : '';
     return `
     <div class="spot-card${i===0?' recommended':''}">
       <div class="spot-header">
-        <div>
-          <div class="spot-name">${esc(spot.name)}</div>
-          <div style="font-size:12px;color:var(--mist-dim);margin-top:2px;">${esc(spot.lake||'')}</div>
-        </div>
+        <div><div class="spot-name">${esc(spot.name)}</div><div style="font-size:12px;color:var(--mist-dim);margin-top:2px;">${esc(spot.lake||'')}</div></div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
           <div class="spot-score">${combined}</div>
-          <div class="spot-badge ${badgeClass}">${badgeText}</div>
+          <div class="spot-badge ${bc}">${bt}</div>
         </div>
       </div>
-      ${spot.species&&spot.species.length ? `<div class="spot-species">${spot.species.map(s=>`<span class="species-chip">${s}</span>`).join('')}</div>` : ''}
+      ${spot.species&&spot.species.length?`<div class="spot-species">${spot.species.map(s=>`<span class="species-chip">${s}</span>`).join('')}</div>`:''}
       <div class="spot-meta">
-        ${spot.structure ? `<span>⬡ ${esc(spot.structure)}</span>` : ''}
-        ${spot.depth ? `<span>↕ ${esc(spot.depth)}</span>` : ''}
+        ${spot.structure?`<span>⬡ ${esc(spot.structure)}</span>`:''}
+        ${spot.depth?`<span>↕ ${esc(spot.depth)}</span>`:''}
       </div>
-      ${reasons.length ? `<div class="spot-why">✓ ${reasons.join(' · ')}</div>` : ''}
+      ${reasons.length?`<div class="spot-why">✓ ${reasons.join(' · ')}</div>`:''}
+      <div class="spot-actions">${mapLink}${fishBtn}</div>
     </div>`;
   }).join('');
 }
 
 // ============================================================
-//  MAIN SEARCH FLOW
+//  SEARCH
 // ============================================================
-async function runSearch(){
-  const q = document.getElementById('locInput').value.trim();
+async function runSearch(q){
+  q = q || document.getElementById('locInput').value.trim();
   if(!q){ setStatus('Enter a lake, town, or zip first.', true); return; }
-  const btn = document.getElementById('searchBtn');
-  btn.disabled = true;
-  setStatus('Finding conditions…');
-  document.getElementById('locResult').textContent = '';
+  const btn=document.getElementById('searchBtn');
+  btn.disabled=true; setStatus('Finding conditions…');
+  document.getElementById('locResult').textContent='';
   try{
-    const loc = await geocode(q);
-    document.getElementById('locResult').textContent = `📍 ${loc.label}`;
-    const weather = await fetchWeather(loc.lat, loc.lon);
-    state.coords = loc;
-    state.weather = weather;
-    state.manualWaterTemp = null;
-    document.getElementById('waterTempInput').value = '';
-    setStatus('');
-    renderScore();
-    persist();
+    const loc=await geocode(q);
+    document.getElementById('locResult').textContent=`📍 ${loc.label}`;
+    const weather=await fetchWeather(loc.lat,loc.lon);
+    state.coords=loc; state.weather=weather; state.manualWaterTemp=null;
+    document.getElementById('waterTempInput').value='';
+    setStatus(''); renderScore(); persist();
   }catch(e){
     setStatus('Could not reach live weather data. Double-check the name or try a nearby town.', true);
-  }finally{
-    btn.disabled = false;
-  }
+  }finally{ btn.disabled=false; }
 }
-document.getElementById('searchBtn').addEventListener('click', runSearch);
-document.getElementById('locInput').addEventListener('keydown', e => { if(e.key === 'Enter') runSearch(); });
-document.getElementById('applyOverrideBtn').addEventListener('click', () => {
-  const v = parseFloat(document.getElementById('waterTempInput').value);
-  state.manualWaterTemp = isNaN(v) ? null : v;
+document.getElementById('searchBtn').addEventListener('click', ()=>runSearch());
+document.getElementById('locInput').addEventListener('keydown', e=>{ if(e.key==='Enter') runSearch(); });
+document.getElementById('applyOverrideBtn').addEventListener('click',()=>{
+  const v=parseFloat(document.getElementById('waterTempInput').value);
+  state.manualWaterTemp=isNaN(v)?null:v;
   if(state.weather) renderScore();
 });
 
+// "Fish This Spot" — load forecast for a spot's lake
+function fishThisSpot(lake){
+  document.getElementById('locInput').value=lake;
+  switchTab('forecast');
+  runSearch(lake);
+}
+
 // ============================================================
-//  SPOTS TAB — form helpers
+//  SPOTS TAB
 // ============================================================
-document.getElementById('structGrid').addEventListener('click', e => {
-  const btn = e.target.closest('.struct-btn');
-  if(!btn) return;
-  btn.classList.toggle('active');
-  selectedStructures = [...document.querySelectorAll('.struct-btn.active')].map(b=>b.dataset.struct);
+document.getElementById('structGrid').addEventListener('click',e=>{
+  const b=e.target.closest('.struct-btn'); if(!b) return;
+  b.classList.toggle('active');
+  selectedStructures=[...document.querySelectorAll('.struct-btn.active')].map(x=>x.dataset.struct);
+});
+document.getElementById('depthGrid').addEventListener('click',e=>{
+  const c=e.target.closest('.depth-chip'); if(!c) return;
+  document.querySelectorAll('.depth-chip').forEach(x=>x.classList.remove('active'));
+  selectedDepth=selectedDepth===c.dataset.depth?null:c.dataset.depth;
+  if(selectedDepth) c.classList.add('active');
 });
 
-document.getElementById('depthGrid').addEventListener('click', e => {
-  const chip = e.target.closest('.depth-chip');
-  if(!chip) return;
-  document.querySelectorAll('.depth-chip').forEach(c=>c.classList.remove('active'));
-  if(selectedDepth === chip.dataset.depth){
-    selectedDepth = null;
-  } else {
-    chip.classList.add('active');
-    selectedDepth = chip.dataset.depth;
-  }
+// Species filter
+document.getElementById('spotsFilter').addEventListener('click',e=>{
+  const c=e.target.closest('.filter-chip'); if(!c) return;
+  document.querySelectorAll('.filter-chip').forEach(x=>x.classList.remove('active'));
+  c.classList.add('active');
+  activeSpotFilter=c.dataset.filter;
+  renderSpotsList();
 });
 
 function resetSpotForm(){
-  document.getElementById('spotName').value = '';
-  document.getElementById('spotLake').value = '';
-  document.getElementById('spotLat').value = '';
-  document.getElementById('spotLon').value = '';
+  ['spotName','spotLake','spotLat','spotLon','spotNotes'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.spotSpecies').forEach(c=>c.checked=false);
   document.querySelectorAll('.struct-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.depth-chip').forEach(c=>c.classList.remove('active'));
-  document.getElementById('spotNotes').value = '';
-  selectedStructures = [];
-  selectedDepth = null;
-  editingSpotId = null;
-  document.getElementById('spotFormTitle').textContent = 'Add a Spot';
-  document.getElementById('cancelSpotBtn').style.display = 'none';
-  document.getElementById('spotFormStatus').textContent = '';
+  selectedStructures=[]; selectedDepth=null; editingSpotId=null;
+  document.getElementById('spotFormTitle').textContent='Add a Spot';
+  document.getElementById('cancelSpotBtn').style.display='none';
+  document.getElementById('spotFormStatus').textContent='';
 }
+document.getElementById('cancelSpotBtn').addEventListener('click',resetSpotForm);
 
-document.getElementById('cancelSpotBtn').addEventListener('click', resetSpotForm);
-
-document.getElementById('saveSpotBtn').addEventListener('click', () => {
-  const name = document.getElementById('spotName').value.trim();
-  const lake = document.getElementById('spotLake').value.trim();
-  if(!name){ document.getElementById('spotFormStatus').textContent = 'Spot name required.'; return; }
-
-  const species = [...document.querySelectorAll('.spotSpecies:checked')].map(c=>c.value);
-  const lat = parseFloat(document.getElementById('spotLat').value) || null;
-  const lon = parseFloat(document.getElementById('spotLon').value) || null;
-  const notes = document.getElementById('spotNotes').value.trim();
-
+document.getElementById('saveSpotBtn').addEventListener('click',()=>{
+  const name=document.getElementById('spotName').value.trim();
+  if(!name){ document.getElementById('spotFormStatus').textContent='Spot name required.'; return; }
+  const lake=document.getElementById('spotLake').value.trim();
+  const species=[...document.querySelectorAll('.spotSpecies:checked')].map(c=>c.value);
+  const lat=parseFloat(document.getElementById('spotLat').value)||null;
+  const lon=parseFloat(document.getElementById('spotLon').value)||null;
+  const notes=document.getElementById('spotNotes').value.trim();
+  const entry={name,lake,lat,lon,species,structure:selectedStructures.join(', '),depth:selectedDepth||'',notes};
   if(editingSpotId){
-    const idx = spots.findIndex(s=>s.id===editingSpotId);
-    if(idx > -1){
-      spots[idx] = { ...spots[idx], name, lake, lat, lon, species, structure:selectedStructures.join(', '), depth:selectedDepth||'', notes, updatedAt:Date.now() };
-    }
+    const i=spots.findIndex(s=>s.id===editingSpotId);
+    if(i>-1) spots[i]={...spots[i],...entry,updatedAt:Date.now()};
   } else {
-    spots.push({ id:uid(), name, lake, lat, lon, species, structure:selectedStructures.join(', '), depth:selectedDepth||'', notes, createdAt:Date.now() });
+    spots.push({id:uid(),...entry,createdAt:Date.now()});
   }
-  persist();
-  resetSpotForm();
-  renderSpotsList();
-  document.getElementById('spotFormStatus').textContent = '✓ Saved';
-  setTimeout(()=>{ document.getElementById('spotFormStatus').textContent=''; }, 2000);
+  persist(); resetSpotForm(); renderSpotsList();
+  document.getElementById('spotFormStatus').textContent='✓ Saved';
+  setTimeout(()=>document.getElementById('spotFormStatus').textContent='',2000);
 });
 
 function editSpot(id){
-  const spot = spots.find(s=>s.id===id);
-  if(!spot) return;
-  editingSpotId = id;
-  document.getElementById('spotName').value = spot.name||'';
-  document.getElementById('spotLake').value = spot.lake||'';
-  document.getElementById('spotLat').value = spot.lat||'';
-  document.getElementById('spotLon').value = spot.lon||'';
+  const spot=spots.find(s=>s.id===id); if(!spot) return;
+  editingSpotId=id;
+  document.getElementById('spotName').value=spot.name||'';
+  document.getElementById('spotLake').value=spot.lake||'';
+  document.getElementById('spotLat').value=spot.lat||'';
+  document.getElementById('spotLon').value=spot.lon||'';
   document.querySelectorAll('.spotSpecies').forEach(c=>{ c.checked=(spot.species||[]).includes(c.value); });
-  selectedStructures = (spot.structure||'').split(',').map(s=>s.trim()).filter(Boolean);
-  document.querySelectorAll('.struct-btn').forEach(b=>{
-    b.classList.toggle('active', selectedStructures.includes(b.dataset.struct));
-  });
-  selectedDepth = spot.depth||null;
-  document.querySelectorAll('.depth-chip').forEach(c=>{
-    c.classList.toggle('active', c.dataset.depth===selectedDepth);
-  });
-  document.getElementById('spotNotes').value = spot.notes||'';
-  document.getElementById('spotFormTitle').textContent = 'Edit Spot';
-  document.getElementById('cancelSpotBtn').style.display = 'inline-block';
-  document.querySelector('.panel').scrollIntoView({ behavior:'smooth' });
+  selectedStructures=(spot.structure||'').split(',').map(s=>s.trim()).filter(Boolean);
+  document.querySelectorAll('.struct-btn').forEach(b=>b.classList.toggle('active',selectedStructures.includes(b.dataset.struct)));
+  selectedDepth=spot.depth||null;
+  document.querySelectorAll('.depth-chip').forEach(c=>c.classList.toggle('active',c.dataset.depth===selectedDepth));
+  document.getElementById('spotNotes').value=spot.notes||'';
+  document.getElementById('spotFormTitle').textContent='Edit Spot';
+  document.getElementById('cancelSpotBtn').style.display='inline-block';
+  document.querySelector('#pageSpots .panel').scrollIntoView({behavior:'smooth'});
 }
-
 function deleteSpot(id){
   if(!confirm('Delete this spot?')) return;
-  spots = spots.filter(s=>s.id!==id);
-  persist();
-  renderSpotsList();
+  spots=spots.filter(s=>s.id!==id); persist(); renderSpotsList();
 }
 
 function renderSpotsList(){
-  const el = document.getElementById('spotsList');
+  const el=document.getElementById('spotsList');
+  const filtered=activeSpotFilter==='all'?spots:spots.filter(s=>s.species&&s.species.includes(activeSpotFilter));
   if(!spots.length){
-    el.innerHTML = `<div class="empty-state"><span class="big">📍</span>No spots yet — add your first fishing spot above and it'll show up here and in the forecast tab.</div>`;
+    el.innerHTML=`<div class="empty-state"><span class="big">📍</span>No spots yet — add your first above. They'll appear here and in the Forecast tab ranked by current conditions.</div>`;
     return;
   }
-  el.innerHTML = spots.map(spot => `
+  if(!filtered.length){
+    el.innerHTML=`<div class="empty-state"><span class="big">🔍</span>No ${activeSpotFilter} spots saved yet.</div>`;
+    return;
+  }
+  el.innerHTML=filtered.map(spot=>{
+    const mapLink=spot.lat&&spot.lon
+      ?`<a href="https://maps.google.com/?q=${spot.lat},${spot.lon}" target="_blank" rel="noopener" class="btn-ghost" style="font-size:12px;padding:6px 10px;text-decoration:none;">🗺 Map</a>`:'';
+    const fishBtn=spot.lake
+      ?`<button class="btn-teal" style="font-size:12px;padding:6px 10px;" onclick="fishThisSpot('${esc(spot.lake)}')">⚡ Forecast</button>`:'';
+    return `
     <div class="spot-card">
       <div class="spot-header">
-        <div>
-          <div class="spot-name">${esc(spot.name)}</div>
-          ${spot.lake ? `<div style="font-size:12px;color:var(--mist-dim);margin-top:2px;">${esc(spot.lake)}</div>` : ''}
-        </div>
+        <div><div class="spot-name">${esc(spot.name)}</div>${spot.lake?`<div style="font-size:12px;color:var(--mist-dim);margin-top:2px;">${esc(spot.lake)}</div>`:''}</div>
       </div>
-      ${spot.species&&spot.species.length ? `<div class="spot-species">${spot.species.map(s=>`<span class="species-chip">${s}</span>`).join('')}</div>` : ''}
+      ${spot.species&&spot.species.length?`<div class="spot-species">${spot.species.map(s=>`<span class="species-chip">${s}</span>`).join('')}</div>`:''}
       <div class="spot-meta">
-        ${spot.structure ? `<span>⬡ ${esc(spot.structure)}</span>` : ''}
-        ${spot.depth ? `<span>↕ ${esc(spot.depth)}</span>` : ''}
-        ${spot.lat&&spot.lon ? `<span>🧭 ${spot.lat.toFixed(4)}, ${spot.lon.toFixed(4)}</span>` : ''}
+        ${spot.structure?`<span>⬡ ${esc(spot.structure)}</span>`:''}
+        ${spot.depth?`<span>↕ ${esc(spot.depth)}</span>`:''}
+        ${spot.lat&&spot.lon?`<span>🧭 ${Number(spot.lat).toFixed(4)}, ${Number(spot.lon).toFixed(4)}</span>`:''}
       </div>
-      ${spot.notes ? `<div class="spot-why">${esc(spot.notes)}</div>` : ''}
+      ${spot.notes?`<div class="spot-why">${esc(spot.notes)}</div>`:''}
       <div class="spot-actions">
+        ${fishBtn}${mapLink}
         <button class="btn-ghost" onclick="editSpot('${spot.id}')">Edit</button>
         <button class="btn-danger" onclick="deleteSpot('${spot.id}')">Delete</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
+
+// Export
+document.getElementById('exportBtn').addEventListener('click',()=>{
+  const data={spots,trips,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`contour-export-${todayISO()}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+});
 
 // ============================================================
 //  LOG TAB
 // ============================================================
 function populateLogSpotSelect(){
-  const sel = document.getElementById('logSpotSelect');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">— pick a saved spot —</option>' +
+  const sel=document.getElementById('logSpotSelect');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— pick a saved spot —</option>'+
     spots.map(s=>`<option value="${s.id}">${esc(s.name)}${s.lake?' — '+esc(s.lake):''}</option>`).join('');
-  sel.value = cur;
+  sel.value=cur;
 }
 
-document.getElementById('saveLogBtn').addEventListener('click', () => {
-  const spotId = document.getElementById('logSpotSelect').value;
-  const date = document.getElementById('logDate').value.trim() || new Date().toISOString().slice(0,10);
-  const time = document.getElementById('logTime').value;
-  const species = [...document.querySelectorAll('.logSpecies:checked')].map(c=>c.value);
-  const count = parseInt(document.getElementById('logCount').value)||0;
-  const bestSize = parseFloat(document.getElementById('logBestSize').value)||null;
-  const notes = document.getElementById('logNotes').value.trim();
+// Pre-fill today's date
+document.getElementById('logDate').value = todayISO();
 
-  const spot = spots.find(s=>s.id===spotId);
-  trips.push({ id:uid(), spotId, spotName: spot ? spot.name : '(no spot)', spotLake: spot ? spot.lake : '', date, time, species, count, bestSize, notes, createdAt:Date.now() });
+document.getElementById('saveLogBtn').addEventListener('click',()=>{
+  const spotId=document.getElementById('logSpotSelect').value;
+  const date=document.getElementById('logDate').value||todayISO();
+  const time=document.getElementById('logTime').value;
+  const species=[...document.querySelectorAll('.logSpecies:checked')].map(c=>c.value);
+  const count=parseInt(document.getElementById('logCount').value)||0;
+  const bestSize=parseFloat(document.getElementById('logBestSize').value)||null;
+  const notes=document.getElementById('logNotes').value.trim();
+  const spot=spots.find(s=>s.id===spotId);
+  trips.push({id:uid(),spotId,spotName:spot?spot.name:'(no spot)',spotLake:spot?spot.lake:'',date,time,species,count,bestSize,notes,createdAt:Date.now()});
   persist();
-
   document.getElementById('logSpotSelect').value='';
   document.querySelectorAll('.logSpecies').forEach(c=>c.checked=false);
   document.getElementById('logCount').value='';
   document.getElementById('logBestSize').value='';
   document.getElementById('logNotes').value='';
+  document.getElementById('logDate').value=todayISO();
   document.getElementById('logFormStatus').textContent='✓ Trip logged';
-  setTimeout(()=>{ document.getElementById('logFormStatus').textContent=''; },2000);
-  renderLogList();
+  setTimeout(()=>document.getElementById('logFormStatus').textContent='',2000);
+  renderLogList(); renderStats();
 });
 
 function deleteTrip(id){
   if(!confirm('Delete this trip entry?')) return;
-  trips = trips.filter(t=>t.id!==id);
-  persist();
-  renderLogList();
+  trips=trips.filter(t=>t.id!==id); persist(); renderLogList(); renderStats();
+}
+
+// ---- Stats ----
+function renderStats(){
+  const el=document.getElementById('statsArea');
+  if(!trips.length){ el.innerHTML=''; return; }
+  const totalFish=trips.reduce((a,t)=>a+t.count,0);
+  const totalTrips=trips.length;
+  const bestFish=trips.reduce((a,t)=>t.bestSize&&t.bestSize>a?t.bestSize:a,0);
+  // Best spot by fish count
+  const bySpot={};
+  trips.forEach(t=>{ bySpot[t.spotName]=(bySpot[t.spotName]||0)+t.count; });
+  const topSpot=Object.entries(bySpot).sort((a,b)=>b[1]-a[1])[0];
+  el.innerHTML=`
+  <div class="stats-row">
+    <div class="stat-box"><div class="stat-num">${totalTrips}</div><div class="stat-label">Trips</div></div>
+    <div class="stat-box"><div class="stat-num">${totalFish}</div><div class="stat-label">Fish Total</div></div>
+    ${bestFish?`<div class="stat-box"><div class="stat-num">${bestFish}"</div><div class="stat-label">Best Fish</div></div>`:''}
+    ${topSpot?`<div class="stat-box" style="min-width:120px;"><div class="stat-num" style="font-size:15px;">${esc(topSpot[0])}</div><div class="stat-label">Top Spot</div></div>`:''}
+  </div>`;
 }
 
 function renderLogList(){
-  const el = document.getElementById('logList');
+  const el=document.getElementById('logList');
   if(!trips.length){
-    el.innerHTML = `<div class="empty-state"><span class="big">📓</span>No trips logged yet. Record your outings here to track what's working over time.</div>`;
+    el.innerHTML=`<div class="empty-state"><span class="big">📓</span>No trips logged yet. Record your outings to track what's working over time.</div>`;
     return;
   }
-  const sorted = [...trips].sort((a,b)=>b.createdAt-a.createdAt);
-  el.innerHTML = sorted.map(t => `
+  el.innerHTML=[...trips].sort((a,b)=>b.createdAt-a.createdAt).map(t=>`
     <div class="log-entry">
       <div class="log-header">
-        <div class="log-spot">${esc(t.spotName)}${t.spotLake?' <span style="font-weight:400;color:var(--mist-dim);">— '+esc(t.spotLake)+'</span>':''}</div>
+        <div class="log-spot">${esc(t.spotName)}${t.spotLake?` <span style="font-weight:400;color:var(--mist-dim);">— ${esc(t.spotLake)}</span>`:''}</div>
         <div class="log-date">${esc(t.date)} · ${esc(t.time)}</div>
       </div>
-      ${t.species&&t.species.length ? `<div style="margin-bottom:5px;">${t.species.map(s=>`<span class="log-species-chip">${s}</span>`).join('')}</div>` : ''}
+      ${t.species&&t.species.length?`<div style="margin-bottom:5px;">${t.species.map(s=>`<span class="log-species-chip">${s}</span>`).join('')}</div>`:''}
       <div class="log-detail">
-        ${t.count > 0 ? `<span class="log-catch">${t.count} fish${t.bestSize?` · best ${t.bestSize}"`:''}  </span>` : '<span style="color:var(--mist-dim)">No catch recorded  </span>'}
-        ${t.notes ? esc(t.notes) : ''}
+        ${t.count>0?`<span class="log-catch">${t.count} fish${t.bestSize?` · best ${t.bestSize}"`:''}  </span>`:'<span style="color:var(--mist-dim)">No catch recorded  </span>'}
+        ${t.notes?esc(t.notes):''}
       </div>
       <div class="spot-actions" style="margin-top:8px;">
         <button class="btn-danger" onclick="deleteTrip('${t.id}')">Delete</button>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 // ============================================================
@@ -1316,6 +1072,13 @@ function renderLogList(){
 function esc(str){
   if(!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+//  PWA SERVICE WORKER
+// ============================================================
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 
 // ============================================================
