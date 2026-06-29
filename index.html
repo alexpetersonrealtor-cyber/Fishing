@@ -95,6 +95,20 @@
   .trip-planner-row input[type="date"],.trip-planner-row input[type="time"]{background:var(--surface-2);border:1px solid var(--line);color:var(--mist);padding:6px 8px;border-radius:8px;font-size:13px;font-family:'Inter',sans-serif;color-scheme:dark;}
   .trip-banner{background:var(--surface-2);border:1px solid var(--amber);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--amber);margin-bottom:8px;font-family:'IBM Plex Mono',monospace;}
 
+  /* Depth target card */
+  .depth-card{background:var(--surface);border:1px solid var(--teal);border-radius:14px;padding:16px;margin-bottom:12px;}
+  .depth-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .depth-card-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--teal);}
+  .depth-card-primary{font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:600;color:var(--amber);line-height:1;}
+  .depth-card-unit{font-size:13px;color:var(--mist-dim);margin-left:2px;}
+  .depth-bar-wrap{margin:10px 0 6px;background:var(--surface-2);border-radius:8px;height:12px;position:relative;overflow:visible;}
+  .depth-bar-fill{position:absolute;height:100%;border-radius:8px;background:linear-gradient(90deg,#3DBFBF,#E0A53D);}
+  .depth-bar-tick{position:absolute;top:-3px;width:3px;height:18px;background:var(--amber);border-radius:2px;transform:translateX(-50%);}
+  .depth-bar-labels{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mist-dim);margin-top:2px;}
+  .depth-reasoning{font-size:12px;color:var(--mist-dim);line-height:1.55;margin-top:8px;}
+  .depth-method{font-size:12px;color:var(--mist);line-height:1.55;margin-top:6px;padding:8px 10px;background:var(--surface-2);border-radius:8px;border-left:3px solid var(--teal);}
+  .thermocline-tag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--surface-2);border:1px solid var(--teal);color:var(--teal);border-radius:6px;padding:2px 7px;margin-top:6px;}
+
   /* meter */
   .meter-panel{display:flex;flex-direction:column;align-items:center;padding:22px 16px 10px;}
   .meter-wrap{position:relative;width:220px;height:220px;}
@@ -342,6 +356,9 @@
     </div>
 
     <!-- Structure / Topo Guide -->
+    <!-- Depth Target card -->
+    <div id="depthPanel" style="display:none;"></div>
+
     <div id="structurePanel" style="display:none;">
       <div class="rec-top">Where to Fish the Shore</div>
       <div id="structureList"></div>
@@ -882,6 +899,109 @@ function pressureTrend(w, overrideIdx){
 function estWaterTemp(w){
   const ts=w.hourly.temperature_2m.filter(t=>typeof t==='number');
   return ts.reduce((a,b)=>a+b,0)/ts.length - 4;
+}
+
+// ─── Specific depth + thermocline recommendation ───────────────────────────
+function calcDepthTarget(species, waterTempF, windMph, pressureSlope, now, w){
+  const month = now.getMonth()+1;
+  const hour  = now.getHours();
+
+  // Estimate thermocline depth from surface temp + wind mixing history
+  // Sustained wind mixes/deepens the thermocline; calm allows stratification
+  const recentWind = (w?.hourly?.wind_speed_10m || []).slice(-24).filter(v=>v!=null);
+  const avgWind24h = recentWind.length ? recentWind.reduce((a,b)=>a+b,0)/recentWind.length : windMph;
+  const mixingFactor = avgWind24h > 18 ? 1.35 : avgWind24h > 12 ? 1.15 : avgWind24h > 6 ? 1.0 : 0.85;
+
+  // Base thermocline depth from surface temp (empirical lake model)
+  let thermoclineDepthFt;
+  if     (waterTempF < 50) thermoclineDepthFt = null;  // fully mixed, no stratification
+  else if(waterTempF < 56) thermoclineDepthFt = 10;
+  else if(waterTempF < 62) thermoclineDepthFt = 16;
+  else if(waterTempF < 68) thermoclineDepthFt = 24;
+  else if(waterTempF < 74) thermoclineDepthFt = 32;
+  else if(waterTempF < 80) thermoclineDepthFt = 40;
+  else                     thermoclineDepthFt = 50;
+
+  if(thermoclineDepthFt) thermoclineDepthFt = Math.round(thermoclineDepthFt * mixingFactor);
+
+  const isNightOrDusk = hour < 6 || hour > 20;
+  const isMorning     = hour >= 5 && hour <= 9;
+  const isHotAfternoon= hour >= 12 && hour <= 17 && waterTempF > 68;
+
+  let minFt, maxFt, primaryFt, reasoning, method;
+
+  if(species === 'salmon' || species === 'trout'){
+    // Salmon and trout seek water 2–8°F colder than surface — ride just above the thermocline
+    if(!thermoclineDepthFt){
+      // Cold, mixed — fish are roaming, find the coldest water
+      minFt = 8; maxFt = 30; primaryFt = 18;
+      reasoning = `Water at ${waterTempF.toFixed(0)}°F is cold and well-mixed — no thermocline yet. Fish are distributed; target mid-column.`;
+      method = 'Troll or cast at 15–25 ft; vary depth until you find fish.';
+    } else {
+      // Run lures 3–8 ft ABOVE the thermocline where oxygen and bait stack
+      const runAbove = species === 'salmon' ? 5 : 8;
+      primaryFt = thermoclineDepthFt - runAbove;
+      minFt = primaryFt - 4;
+      maxFt = primaryFt + 6;
+      if(waterTempF > 72){
+        // Very warm surface — fish may be deeper, right at or just below thermocline
+        primaryFt = thermoclineDepthFt + 2;
+        minFt = thermoclineDepthFt - 3;
+        maxFt = thermoclineDepthFt + 8;
+        reasoning = `Surface at ${waterTempF.toFixed(0)}°F is warm — ${species} pushed deep. Thermocline est. ${thermoclineDepthFt} ft${mixingFactor>1?' (wind-mixed deeper)':''}. Target right at or just below it.`;
+      } else {
+        const windNote = mixingFactor>1?` (deepened by ${avgWind24h.toFixed(0)} mph avg wind)`:mixingFactor<1?' (shallow — calm conditions)':'';
+        reasoning = `Thermocline est. ${thermoclineDepthFt} ft${windNote}. ${species==='salmon'?'Salmon':'Trout'} stack 3–8 ft above it where oxygen peaks.`;
+      }
+      method = species === 'salmon'
+        ? `Set downrigger to ${primaryFt} ft. Run spoons or flasher-fly at ${minFt}–${maxFt} ft. Check every 5 ft if no strikes in 20 min.`
+        : `Set ${primaryFt} ft on the downrigger or count down a jigging spoon. Leadcore line: ${Math.round(primaryFt/5)} colors.`;
+    }
+
+  } else if(species === 'walleye'){
+    // Walleye are photophobic — depth depends heavily on time of day
+    if(isNightOrDusk){
+      minFt = 3; maxFt = 12; primaryFt = 6;
+      reasoning = `Low light — walleye push shallow to feed. Surface at ${waterTempF.toFixed(0)}°F.`;
+      method = 'Jig or live-bait rig 3–10 ft. Rocky points and weed edges at night.';
+    } else if(waterTempF > 72){
+      minFt = 18; maxFt = 35; primaryFt = 26;
+      reasoning = `Warm water (${waterTempF.toFixed(0)}°F) and bright conditions push walleye deep. Thermocline est. ${thermoclineDepthFt||'—'} ft.`;
+      method = `Lindy rig or bottom bouncer at ${primaryFt} ft on main-lake structure. Vertical jigging over 25–35 ft flats.`;
+    } else {
+      minFt = 8; maxFt = 22; primaryFt = 14;
+      if(pressureSlope <= -0.2){ minFt=5; maxFt=16; primaryFt=10; }
+      reasoning = `${waterTempF.toFixed(0)}°F water${pressureSlope<=-0.2?', falling pressure — fish shallower structure':''}. Walleye on mid-depth transition zones.`;
+      method = `Jig or crawler harness at ${primaryFt} ft along rock ledges and weed edges. Troll at 1.2–1.8 mph.`;
+    }
+
+  } else { // bass
+    if(isHotAfternoon && waterTempF > 74){
+      minFt = 12; maxFt = 28; primaryFt = 18;
+      reasoning = `Hot afternoon (${waterTempF.toFixed(0)}°F) — bass moved deep to find cooler water. Thermocline est. ${thermoclineDepthFt||'—'} ft.`;
+      method = `Drop-shot or Carolina rig at ${primaryFt} ft on main-lake humps and ledges. Slow presentation.`;
+    } else if(isMorning || isNightOrDusk){
+      minFt = 1; maxFt = 8; primaryFt = 4;
+      reasoning = `${isMorning?'Morning feed':'Low-light window'} — bass shallow. Water at ${waterTempF.toFixed(0)}°F.`;
+      method = 'Topwater, swim jig, or spinnerbait in 1–6 ft. Target weed edges and points.';
+    } else if(waterTempF < 58){
+      minFt = 6; maxFt = 18; primaryFt = 12;
+      reasoning = `Cool water (${waterTempF.toFixed(0)}°F) slows metabolism — bass staging on deeper structure.`;
+      method = `Jig or swimbait at ${primaryFt} ft on sunny, dark-bottom coves and rocky banks.`;
+    } else {
+      minFt = 5; maxFt = 15; primaryFt = 8;
+      if(pressureSlope <= -0.2){ minFt=3; maxFt=10; primaryFt=6; }
+      reasoning = `${waterTempF.toFixed(0)}°F${pressureSlope<=-0.2?' and falling pressure — fish feeding up':' — prime feeding range for bass'}.`;
+      method = `Shaky head or finesse jig at ${primaryFt} ft. Cover transition zones between hard and soft bottom.`;
+    }
+  }
+
+  // Clamp to sensible ranges
+  minFt = Math.max(1, Math.round(minFt));
+  maxFt = Math.max(minFt+3, Math.round(maxFt));
+  primaryFt = Math.round(Math.max(minFt, Math.min(maxFt, primaryFt)));
+
+  return { minFt, maxFt, primaryFt, reasoning, method, thermoclineDepthFt };
 }
 
 // ============================================================
@@ -1590,6 +1710,40 @@ function renderStructureGuide(ctx){
   });
 }
 
+function renderDepthTarget(ctx){
+  const panel = document.getElementById('depthPanel');
+  if(!ctx || !state.weather){ panel.style.display='none'; return; }
+
+  const dt = calcDepthTarget(state.species, ctx.waterTemp, ctx.windMph, ctx.pressureSlope, ctx.now, state.weather);
+  const maxScale = 60; // bar represents 0–60 ft
+  const fillPct  = pct => Math.min(100, (pct/maxScale)*100).toFixed(1);
+  const minPct   = fillPct(dt.minFt);
+  const widthPct = (Math.min(maxScale,dt.maxFt) - Math.min(maxScale,dt.minFt))/maxScale*100;
+  const tickPct  = fillPct(dt.primaryFt);
+
+  const speciesLabel = {bass:'Bass',walleye:'Walleye',salmon:'Salmon',trout:'Trout'}[state.species]||state.species;
+  const thermoclineTag = dt.thermoclineDepthFt
+    ? `<span class="thermocline-tag">🌡 Thermocline est. ${dt.thermoclineDepthFt} ft</span>`
+    : `<span class="thermocline-tag">🌡 No thermocline — water well-mixed</span>`;
+
+  panel.style.display='block';
+  panel.innerHTML=`<div class="depth-card">
+    <div class="depth-card-header">
+      <div class="depth-card-title">🎯 ${speciesLabel} Depth Target</div>
+      <div><span class="depth-card-primary">${dt.primaryFt}</span><span class="depth-card-unit">ft</span></div>
+    </div>
+    <div style="font-size:12px;color:var(--mist-dim);margin-bottom:6px;">Range: <strong style="color:var(--mist);">${dt.minFt}–${dt.maxFt} ft</strong></div>
+    <div class="depth-bar-wrap">
+      <div class="depth-bar-fill" style="left:${minPct}%;width:${widthPct.toFixed(1)}%;"></div>
+      <div class="depth-bar-tick" style="left:${tickPct}%;"></div>
+    </div>
+    <div class="depth-bar-labels"><span>0 ft</span><span>30 ft</span><span>60 ft</span></div>
+    ${thermoclineTag}
+    <div class="depth-reasoning">${dt.reasoning}</div>
+    <div class="depth-method">🎣 ${dt.method}</div>
+  </div>`;
+}
+
 function renderScore(){
   const {factors, weatherCtx}=buildFactors();
   const total=Math.round(factors.reduce((s,f)=>s+f.score*f.weight,0));
@@ -1634,6 +1788,7 @@ function renderScore(){
   document.getElementById('factorsPanel').style.display='block';
   renderConditionSpots(weatherCtx, total);
   renderStructureGuide(weatherCtx);
+  renderDepthTarget(weatherCtx);
 
   // Trigger buoy load if boat mode is active for a known large lake
   const lake = detectLake(document.getElementById('locInput').value);
