@@ -2156,78 +2156,417 @@ function clearStructLayers(){
   _structLayers = [];
 }
 
-function openStructureMap(structId, structName, lookFor){
-  const lat = state.coords?.lat ?? 42.0;
-  const lon = state.coords?.lon ?? -88.0;
-  window._openMapModal ? window._openMapModal(lat, lon, 15) : document.getElementById('mapPickerBtn').click();
+// ============================================================
+//  OVERPASS REAL FEATURE QUERY
+// ============================================================
+const _osmCache = {}; // keyed by "lat,lon" rounded to 3dp
 
-  // Default water bearing: use wind direction if available (downwind shore = fish)
-  // 180° flip from wind-from direction since wind pushes fish to downwind bank
-  let waterBearing = 270; // default west — user should rotate to match their lake
-  if(state.weather?.current?.wind_direction_10m != null){
-    waterBearing = (state.weather.current.wind_direction_10m + 180) % 360;
-  }
+async function queryFishingFeatures(lat, lon){
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+  if(_osmCache[key]) return _osmCache[key];
 
-  const DIRS = [
-    {label:'N', deg:0},   {label:'NE',deg:45},
-    {label:'E', deg:90},  {label:'SE',deg:135},
-    {label:'S', deg:180}, {label:'SW',deg:225},
-    {label:'W', deg:270}, {label:'NW',deg:315},
-  ];
+  const R = 900;
+  const q = `[out:json][timeout:25];
+(
+  way["waterway"~"^(stream|river|ditch|drain)$"](around:${R},${lat},${lon});
+  node["waterway"~"^(stream|river)$"](around:${R},${lat},${lon});
+  way["man_made"~"^(pier|jetty|dock)$"](around:${R},${lat},${lon});
+  node["man_made"~"^(pier|jetty|dock)$"](around:${R},${lat},${lon});
+  way["leisure"="marina"](around:${R},${lat},${lon});
+  way["natural"="wetland"](around:${R},${lat},${lon});
+  way["natural"~"^(water|lake|pond|reservoir)$"](around:600,${lat},${lon});
+  relation["natural"~"^(water|lake|pond|reservoir)$"](around:600,${lat},${lon});
+  way["natural"="cape"](around:${R},${lat},${lon});
+  way["natural"="beach"](around:${R},${lat},${lon});
+  node["natural"="spring"](around:${R},${lat},${lon});
+);
+out geom;`;
 
-  function redrawLayers(bearing){
-    clearStructLayers();
-    if(window._leafletMap){
-      _structLayers = drawStructureLayers(window._leafletMap, structId, lat, lon, bearing);
+  const res = await fetch('https://overpass-api.de/api/interpreter', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'data='+encodeURIComponent(q)
+  });
+  if(!res.ok) throw new Error('Overpass request failed');
+  const data = await res.json();
+  _osmCache[key] = data;
+  return data;
+}
+
+function centroid(geom){ // geom = [{lat,lon}]
+  return {
+    lat: geom.reduce((s,n)=>s+n.lat,0)/geom.length,
+    lon: geom.reduce((s,n)=>s+n.lon,0)/geom.length
+  };
+}
+
+function haversineM(a, b){
+  const R=6371000, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lon-a.lon)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+// Species-specific fishing tips per feature type
+function featureTip(type, sp){
+  const tips = {
+    inflow:{
+      largemouth:'Bass stack at current seams in inflows — they ambush baitfish swept by the current. Cast parallel to the seam.',
+      smallmouth:'Smallmouth love current. Target the slack water just downstream of the mouth with crankbaits or ned rigs.',
+      walleye:'Walleye prowl inflow current at night. Drift a jig or live bait right through the plume.',
+      muskie:'Muskie follow baitfish into inflow areas. Work a big bucktail through the plume at dusk.',
+      steelhead:'Steelhead stage at creek mouths during run season. Present spawn sacs right at the inflow.',
+      salmon:'Salmon push into inflows pre-spawn. Work the current seam with spoons or egg patterns.',
+      trout:'Trout hold in oxygenated inflow current. Nymph or streamer just inside the plume.',
+      perch:'Perch concentrate near inflows to feed on invertebrates. Jig small minnows at the mouth.',
+    },
+    dock:{
+      largemouth:'Skip jigs or tubes under docks into the shade. Back third of the dock holds the biggest fish.',
+      smallmouth:'Smallmouth hold at the front edge of docks where the rock meets the pilings. Drop-shot or tube.',
+      walleye:'Walleye slide under docks at low light. Slow-roll a swimbait along the shadow edge.',
+      muskie:'Muskie park in deep dock shadows in summer. Figure-eight every retrieval — follows are common.',
+      steelhead:'Steelhead occasionally hold near piers in nearshore staging areas. Spoon or jig parallel to structure.',
+      salmon:'Trolling near pier structure can mark suspended fish. Check your sonar for suspended baitballs.',
+      trout:'Trout stack in the shade of floating docks in warm weather. Small jigs or waxworms.',
+      perch:'Perch school around dock pilings. Drop a small jig straight down and work the column.',
+    },
+    weed:{
+      largemouth:'This is largemouth home turf — punch, flip, or frog over the mat. Dawn and dusk are prime.',
+      smallmouth:'Smallmouth use weed edges as ambush lanes, not the mat interior. Cast parallel to the edge.',
+      walleye:'Walleye sit on the weed edge at low light — not inside. Cast from deep to shallow at dusk.',
+      muskie:'Muskie hunt the weed edge in figure-eights. Work glide baits along the outer edge.',
+      steelhead:'Steelhead don\'t typically use weeds — focus on current and structure instead.',
+      salmon:'Salmon prefer open water — skip this. Head offshore toward the thermocline.',
+      trout:'Trout cruise weed edges for insects and baitfish. Match the hatch or use a streamer.',
+      perch:'Perch school at weed edges and inside pockets. Vertical jig a small minnow.',
+    },
+    point:{
+      largemouth:'Bass position on points as a migration route between deep and shallow. Work it from tip to base.',
+      smallmouth:'Smallmouth love rocky points — target the downwind side where bait stacks up.',
+      walleye:'Points are walleye highways. Fish the tip and both sides at first and last light.',
+      muskie:'Cover the entire point — both flanks and the tip. Muskies cruise these looking to ambush.',
+      steelhead:'Steelhead stage off points in Lake Michigan before pushing into rivers. Spoon along the drop.',
+      salmon:'Salmon follow baitfish around points. Troll parallel to the point at target depth.',
+      trout:'Trout cruise points at dawn and dusk. Streamer cast toward the tip from the deep side.',
+      perch:'Perch school on the downwind side of points where wind pushes bait. Vertical jig.',
+    },
+    cove:{
+      largemouth:'Coves warm faster in spring — largemouth move in first. Spawn beds are often in protected coves.',
+      smallmouth:'Smallmouth use coves as staging areas pre-spawn. Look for gravel bottom inside the cove.',
+      walleye:'Walleye enter coves to spawn in spring on rocky/gravel substrate. Fish the mouth at dusk.',
+      muskie:'Coves hold baitfish in summer, bringing in hungry muskies at dawn. Work the full perimeter.',
+      steelhead:'Less relevant — focus on current and open water for steelhead.',
+      salmon:'Coves can hold staging salmon near stream mouths. Look for baitfish activity on sonar.',
+      trout:'Trout use calm coves in evening for surface feeding. Match the hatch with dry flies.',
+      perch:'Perch move into coves in early spring. Jig near any hard bottom you can find.',
+    },
+    beach:{
+      largemouth:'Largemouth cruise sand flats adjacent to beaches, especially at dawn. Shallow crankbait.',
+      smallmouth:'Smallmouth forage on crayfish in sandy shallows early morning. Tube or crayfish-colored crankbait.',
+      walleye:'Sandy beaches are walleye spawning habitat. Fish the drop at the edge of the flat in low light.',
+      muskie:'Beach flats attract muskie when bait schools are present. Work the outside drop with bucktails.',
+      steelhead:'Steelhead run along beach structure during migration. Cast spoons parallel to shore.',
+      salmon:'Salmon cruise beaches during run season. Cast spoons along the beach drop.',
+      trout:'Trout forage along sandy beaches in low light. Minnow-style lures along the shoreline.',
+      perch:'Perch school over sandy flats in spring. Small jig with minnow or wax worm.',
+    },
+    spring:{
+      largemouth:'Springs create year-round cool spots — bass hold nearby in summer heat.',
+      smallmouth:'Smallmouth love cold spring areas in summer — they maintain habitat near springs.',
+      walleye:'Walleye seek cool spring water in summer. Fish the temperature break just downstream.',
+      muskie:'Muskie follow baitfish to spring-cooled water in mid-summer.',
+      steelhead:'Cold springs concentrate steelhead in summer — prime holding water.',
+      salmon:'Salmon seek cold spring water in summer to escape warm surface temps.',
+      trout:'Trout home in on cold springs — this is priority water.',
+      perch:'Perch move to cooler spring-influenced water in summer.',
+    },
+  };
+  return (tips[type]||{})[sp] || `Fish this ${type} — structure type is holding fish in these conditions.`;
+}
+
+function parseFishingFeatures(data, centerLat, centerLon, sp){
+  const features = [];
+  const center = {lat: centerLat, lon: centerLon};
+
+  // Track largest water body for shoreline analysis
+  let lakePoly = null, lakePolyLen = 0;
+
+  for(const el of data.elements){
+    const tags = el.tags || {};
+
+    // --- INFLOWS ---
+    if(tags.waterway && ['stream','river','ditch','drain'].includes(tags.waterway) && el.geometry?.length >= 2){
+      const nodes = el.geometry;
+      // Find the endpoint closest to our center (where stream meets the lake)
+      const dist0 = haversineM(nodes[0], center);
+      const distN = haversineM(nodes[nodes.length-1], center);
+      const mouth = dist0 < distN ? nodes[0] : nodes[nodes.length-1];
+      // Only include if reasonably close
+      if(haversineM(mouth, center) < 800){
+        features.push({type:'inflow', lat:mouth.lat, lon:mouth.lon,
+          label:'Inflow / Current Seam', icon:'💧', color:'#3DBFBF',
+          tip: featureTip('inflow', sp)});
+      }
+    }
+
+    // --- SPRING ---
+    if(tags.natural === 'spring'){
+      features.push({type:'spring', lat:el.lat, lon:el.lon,
+        label:'Natural Spring', icon:'❄️', color:'#3DBFBF',
+        tip: featureTip('spring', sp)});
+    }
+
+    // --- DOCKS / PIERS ---
+    if(tags.man_made && ['pier','jetty','dock'].includes(tags.man_made)){
+      let lat2, lon2;
+      if(el.type==='node'){ lat2=el.lat; lon2=el.lon; }
+      else if(el.geometry?.length){ const c=centroid(el.geometry); lat2=c.lat; lon2=c.lon; }
+      if(lat2!=null) features.push({type:'dock', lat:lat2, lon:lon2,
+        label:'Dock / Pier', icon:'🛶', color:'#8B6914',
+        tip: featureTip('dock', sp)});
+    }
+    if(tags.leisure === 'marina' && el.geometry?.length){
+      const c=centroid(el.geometry);
+      features.push({type:'dock', lat:c.lat, lon:c.lon,
+        label:'Marina / Dock Area', icon:'🛶', color:'#8B6914',
+        tip: featureTip('dock', sp)});
+    }
+
+    // --- WETLANDS ---
+    if(tags.natural === 'wetland' && el.geometry?.length){
+      const c=centroid(el.geometry);
+      features.push({type:'weed', lat:c.lat, lon:c.lon,
+        label:'Weed Bed / Wetland', icon:'🌿', color:'#7C8A52',
+        tip: featureTip('weed', sp)});
+    }
+
+    // --- BEACH ---
+    if(tags.natural === 'beach' && el.geometry?.length){
+      const c=centroid(el.geometry);
+      features.push({type:'beach', lat:c.lat, lon:c.lon,
+        label:'Sandy Beach / Flat', icon:'🏖', color:'#C8A44A',
+        tip: featureTip('beach', sp)});
+    }
+
+    // --- CAPE (OSM-tagged point) ---
+    if(tags.natural === 'cape' && el.geometry?.length){
+      const c=centroid(el.geometry);
+      features.push({type:'point', lat:c.lat, lon:c.lon,
+        label:'Point / Cape', icon:'🫰', color:'#E0A53D',
+        tip: featureTip('point', sp)});
+    }
+
+    // --- WATER BODY — find largest for shoreline analysis ---
+    if((tags.natural === 'water' || tags.natural === 'lake' || tags.natural === 'reservoir') && el.geometry?.length > lakePolyLen){
+      lakePoly = el.geometry;
+      lakePolyLen = el.geometry.length;
     }
   }
 
-  setTimeout(() => {
-    redrawLayers(waterBearing);
+  // --- SHORELINE ANALYSIS on the lake polygon ---
+  if(lakePoly && lakePoly.length > 8){
+    const ctr = centroid(lakePoly);
+    const radii = lakePoly.map(n => haversineM(n, ctr));
+    const avg = radii.reduce((a,b)=>a+b,0)/radii.length;
+    const W = Math.max(4, Math.floor(lakePoly.length / 25));
 
+    const foundPoints = [], foundCoves = [];
+
+    for(let i = W; i < lakePoly.length - W; i++){
+      const r = radii[i];
+      const window_ = radii.slice(i-W, i+W+1);
+      const wMax = Math.max(...window_), wMin = Math.min(...window_);
+
+      // Point = local maximum radius significantly above average
+      if(r === wMax && r > avg * 1.18){
+        const prevAvg = radii.slice(Math.max(0,i-W*2),i).reduce((a,b)=>a+b,0)/(W*2)||avg;
+        const nextAvg = radii.slice(i+1,Math.min(lakePoly.length,i+W*2+1)).reduce((a,b)=>a+b,0)/(W*2)||avg;
+        if(r > prevAvg*1.08 && r > nextAvg*1.08){
+          foundPoints.push({lat:lakePoly[i].lat, lon:lakePoly[i].lon, r});
+        }
+      }
+      // Cove = local minimum radius significantly below average
+      if(r === wMin && r < avg * 0.82){
+        foundCoves.push({lat:lakePoly[i].lat, lon:lakePoly[i].lon, r});
+      }
+    }
+
+    // Deduplicate nearby candidates (keep the most extreme, 80m min spacing)
+    function dedupeByProximity(arr){
+      const kept = [];
+      for(const f of arr.sort((a,b)=>b.r-a.r)){
+        if(!kept.some(k => haversineM(k,f)<80)) kept.push(f);
+      }
+      return kept.slice(0,4); // cap at 4 per type
+    }
+
+    dedupeByProximity(foundPoints).forEach(p => features.push({
+      type:'point', lat:p.lat, lon:p.lon,
+      label:'Point / Finger', icon:'🫰', color:'#E0A53D',
+      tip: featureTip('point', sp)
+    }));
+    dedupeByProximity(foundCoves.sort((a,b)=>a.r-b.r)).forEach(p => features.push({
+      type:'cove', lat:p.lat, lon:p.lon,
+      label:'Cove / Bay', icon:'🏞', color:'#A2503C',
+      tip: featureTip('cove', sp)
+    }));
+  }
+
+  // Global dedup: remove any two features of the same type within 40m of each other
+  const out = [];
+  for(const f of features){
+    if(!out.some(e => e.type===f.type && haversineM(e,f)<40)) out.push(f);
+  }
+  return out;
+}
+
+function renderFishingMarkers(map, features){
+  const layers = [];
+  features.forEach(f => {
+    const html = `<div style="background:${f.color};border:2px solid #122C2E;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;box-shadow:0 2px 6px rgba(0,0,0,0.6);">${f.icon}</div>`;
+    const ic = L.divIcon({html, iconSize:[20,20], iconAnchor:[10,10], className:''});
+    const marker = L.marker([f.lat, f.lon], {icon:ic});
+    const popupHtml = `<div style="font-family:Inter,sans-serif;max-width:220px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${f.icon} ${f.label}</div>
+      <div style="font-size:12px;line-height:1.5;color:#333;">${f.tip}</div>
+    </div>`;
+    marker.bindPopup(popupHtml, {maxWidth:240});
+    marker.addTo(map);
+    layers.push(marker);
+  });
+  return layers;
+}
+
+function openStructureMap(structId, structName, lookFor){
+  const lat = state.coords?.lat ?? 42.0;
+  const lon = state.coords?.lon ?? -88.0;
+  const sp = state.species;
+  window._openMapModal ? window._openMapModal(lat, lon, 15) : document.getElementById('mapPickerBtn').click();
+
+  // Type → display label for the legend
+  const TYPE_LABEL = {inflow:'💧 Inflow',dock:'🛶 Dock',weed:'🌿 Weed Bed',point:'🫰 Point',cove:'🏞 Cove',beach:'🏖 Beach',spring:'❄️ Spring'};
+
+  function showOverlay(contentHtml){
     const existing = document.getElementById('structOverlay');
     if(existing) existing.remove();
     const overlay = document.createElement('div');
     overlay.id = 'structOverlay';
     overlay.className = 'struct-map-overlay';
     overlay.style.pointerEvents = 'auto';
-    overlay.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-        <div class="struct-overlay-title">${structName}</div>
-        <button id="dismissDiagram" style="background:none;border:none;color:var(--mist-dim);font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1;">✕</button>
-      </div>
-      <div class="struct-overlay-sub">${lookFor}</div>
-      <div style="margin:8px 0 4px;font-size:12px;color:var(--amber);font-family:'IBM Plex Mono',monospace;letter-spacing:0.05em;">
-        💧 WATER DIRECTION FROM YOUR PIN
-      </div>
-      <div id="bearingPicker" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;">
-        ${DIRS.map(d=>`<button data-deg="${d.deg}" class="bearing-btn${Math.abs(waterBearing-d.deg)<23||Math.abs(waterBearing-d.deg)>337?' active':''}" style="background:${Math.abs(waterBearing-d.deg)<23||Math.abs(waterBearing-d.deg)>337?'var(--amber)':'var(--surface-2)'};color:${Math.abs(waterBearing-d.deg)<23||Math.abs(waterBearing-d.deg)>337?'var(--deep)':'var(--mist)'};border:1px solid var(--line);border-radius:8px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;padding:6px 4px;cursor:pointer;">${d.label}</button>`).join('')}
-      </div>
-      <div class="struct-overlay-sub" style="color:var(--mist-dim);font-size:11px;margin-bottom:4px;">Tap the direction the lake is from where you're standing — overlays rotate to match.</div>
-      <div class="struct-diagram">${STRUCT_DIAGRAMS[structId] || ''}</div>`;
+    overlay.innerHTML = contentHtml;
     const mapEl = document.getElementById('leafletMap');
     mapEl.style.position = 'relative';
     mapEl.appendChild(overlay);
-
-    overlay.querySelector('#bearingPicker').addEventListener('click', e => {
-      const btn = e.target.closest('[data-deg]');
-      if(!btn) return;
-      waterBearing = +btn.dataset.deg;
-      // Update button styles
-      overlay.querySelectorAll('[data-deg]').forEach(b => {
-        const active = +b.dataset.deg === waterBearing;
-        b.style.background = active ? 'var(--amber)' : 'var(--surface-2)';
-        b.style.color = active ? 'var(--deep)' : 'var(--mist)';
-      });
-      redrawLayers(waterBearing);
+    overlay.querySelector('#dismissDiagram')?.addEventListener('click', e => {
+      e.stopPropagation(); overlay.remove();
     });
+    return overlay;
+  }
 
-    document.getElementById('dismissDiagram').addEventListener('click', e => {
-      e.stopPropagation();
-      overlay.remove();
-    });
-
+  setTimeout(async () => {
     window._leafletMap && window._leafletMap.invalidateSize();
+
+    // Show loading state immediately
+    showOverlay(`
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div class="struct-overlay-title">🗺 ${structName}</div>
+        <button id="dismissDiagram" style="background:none;border:none;color:var(--mist-dim);font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1;">✕</button>
+      </div>
+      <div class="struct-overlay-sub" style="color:var(--amber);">⏳ Querying OpenStreetMap for real fishing spots on this lake…</div>`);
+
+    try {
+      const data = await queryFishingFeatures(lat, lon);
+      const features = parseFishingFeatures(data, lat, lon, sp);
+
+      clearStructLayers();
+      if(window._leafletMap){
+        _structLayers = renderFishingMarkers(window._leafletMap, features);
+      }
+
+      // Count by type
+      const counts = {};
+      features.forEach(f => counts[f.type] = (counts[f.type]||0)+1);
+      const foundTypes = Object.keys(counts);
+
+      if(features.length === 0){
+        // Fallback: no OSM data found, use direction-picker
+        showOverlay(`
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+            <div class="struct-overlay-title">${structName}</div>
+            <button id="dismissDiagram" style="background:none;border:none;color:var(--mist-dim);font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1;">✕</button>
+          </div>
+          <div class="struct-overlay-sub">${lookFor}</div>
+          <div style="margin:8px 0 4px;font-size:12px;color:var(--mist-dim);">No mapped features found in OSM for this area. Use the diagram below as a guide and drop a pin manually.</div>
+          <div class="struct-diagram">${STRUCT_DIAGRAMS[structId] || ''}</div>`);
+        return;
+      }
+
+      // Auto-open popups for features matching the tapped structure type
+      const typeMatch = {
+        point:['point'], dropoff:['point','cove'], weed_edge:['weed'], cove:['cove'],
+        inflow:['inflow'], dock:['dock'], flat:['beach'], rocky_bank:['point','beach'],
+        laydown:['dock','weed'], open_water:['inflow','spring']
+      };
+      const matchTypes = typeMatch[structId] || [];
+
+      let autoOpened = false;
+      _structLayers.forEach((marker, i) => {
+        if(!autoOpened && matchTypes.includes(features[i]?.type)){
+          marker.openPopup();
+          window._leafletMap?.panTo(marker.getLatLng());
+          autoOpened = true;
+        }
+      });
+
+      // Build legend
+      const legendItems = foundTypes.map(t =>
+        `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface-2);border-radius:6px;padding:3px 8px;font-size:12px;">${TYPE_LABEL[t]||t} <span style="opacity:0.6;">${counts[t]}</span></span>`
+      ).join('');
+
+      showOverlay(`
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div class="struct-overlay-title">🗺 Real Fishing Spots</div>
+          <button id="dismissDiagram" style="background:none;border:none;color:var(--mist-dim);font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1;">✕</button>
+        </div>
+        <div style="font-size:12px;color:var(--mist-dim);margin-bottom:8px;">Tap any marker for species-specific tips. Data from OpenStreetMap.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;">${legendItems}</div>
+        <div style="font-size:11px;color:var(--mist-dim);">Showing ${features.length} feature${features.length!==1?'s':''} within 900m · ${structName} highlighted</div>`);
+
+    } catch(err) {
+      // Network error — fall back to direction picker
+      let waterBearing = 270;
+      if(state.weather?.current?.wind_direction_10m != null){
+        waterBearing = (state.weather.current.wind_direction_10m + 180) % 360;
+      }
+      const DIRS = [{label:'N',deg:0},{label:'NE',deg:45},{label:'E',deg:90},{label:'SE',deg:135},{label:'S',deg:180},{label:'SW',deg:225},{label:'W',deg:270},{label:'NW',deg:315}];
+
+      clearStructLayers();
+      if(window._leafletMap) _structLayers = drawStructureLayers(window._leafletMap, structId, lat, lon, waterBearing);
+
+      const ov = showOverlay(`
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+          <div class="struct-overlay-title">${structName}</div>
+          <button id="dismissDiagram" style="background:none;border:none;color:var(--mist-dim);font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1;">✕</button>
+        </div>
+        <div class="struct-overlay-sub">${lookFor}</div>
+        <div style="font-size:11px;color:var(--rust);margin:4px 0 8px;">⚠ Offline — using generic overlay. Point it toward the water:</div>
+        <div id="bearingPicker" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px;">
+          ${DIRS.map(d=>`<button data-deg="${d.deg}" style="background:${Math.abs(((waterBearing-d.deg)+360)%360)<23?'var(--amber)':'var(--surface-2)'};color:${Math.abs(((waterBearing-d.deg)+360)%360)<23?'var(--deep)':'var(--mist)'};border:1px solid var(--line);border-radius:8px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;padding:6px 4px;cursor:pointer;">${d.label}</button>`).join('')}
+        </div>
+        <div class="struct-diagram">${STRUCT_DIAGRAMS[structId] || ''}</div>`);
+
+      ov.querySelector('#bearingPicker')?.addEventListener('click', e => {
+        const btn = e.target.closest('[data-deg]');
+        if(!btn) return;
+        waterBearing = +btn.dataset.deg;
+        ov.querySelectorAll('[data-deg]').forEach(b => {
+          const active = +b.dataset.deg === waterBearing;
+          b.style.background = active?'var(--amber)':'var(--surface-2)';
+          b.style.color = active?'var(--deep)':'var(--mist)';
+        });
+        clearStructLayers();
+        if(window._leafletMap) _structLayers = drawStructureLayers(window._leafletMap, structId, lat, lon, waterBearing);
+      });
+    }
   }, 100);
 }
 
