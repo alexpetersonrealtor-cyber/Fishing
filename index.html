@@ -344,6 +344,7 @@
         <button id="btnSmallmouth">SM Bass</button>
         <button id="btnWalleye">Walleye</button>
         <button id="btnMuskie">Muskie</button>
+        <button id="btnSteelhead">Steelhead</button>
         <button id="btnSalmon">Salmon</button>
         <button id="btnTrout">Trout</button>
         <button id="btnPerch">Perch</button>
@@ -498,6 +499,7 @@
           <label><input type="checkbox" class="spotSpecies" value="smallmouth"> SM Bass</label>
           <label><input type="checkbox" class="spotSpecies" value="walleye"> Walleye</label>
           <label><input type="checkbox" class="spotSpecies" value="muskie"> Muskie</label>
+          <label><input type="checkbox" class="spotSpecies" value="steelhead"> Steelhead</label>
           <label><input type="checkbox" class="spotSpecies" value="salmon"> Salmon</label>
           <label><input type="checkbox" class="spotSpecies" value="trout"> Trout</label>
           <label><input type="checkbox" class="spotSpecies" value="perch"> Perch</label>
@@ -553,6 +555,7 @@
         <button class="filter-chip" data-filter="smallmouth">SM Bass</button>
         <button class="filter-chip" data-filter="walleye">Walleye</button>
         <button class="filter-chip" data-filter="muskie">Muskie</button>
+        <button class="filter-chip" data-filter="steelhead">Steelhead</button>
         <button class="filter-chip" data-filter="salmon">Salmon</button>
         <button class="filter-chip" data-filter="trout">Trout</button>
         <button class="filter-chip" data-filter="perch">Perch</button>
@@ -724,7 +727,7 @@ tabs.log.addEventListener('click', ()=>switchTab('log'));
 // ============================================================
 //  SPECIES TOGGLE
 // ============================================================
-const speciesBtns = { largemouth:document.getElementById('btnLargemouth'), smallmouth:document.getElementById('btnSmallmouth'), walleye:document.getElementById('btnWalleye'), muskie:document.getElementById('btnMuskie'), salmon:document.getElementById('btnSalmon'), trout:document.getElementById('btnTrout'), perch:document.getElementById('btnPerch') };
+const speciesBtns = { largemouth:document.getElementById('btnLargemouth'), smallmouth:document.getElementById('btnSmallmouth'), walleye:document.getElementById('btnWalleye'), muskie:document.getElementById('btnMuskie'), steelhead:document.getElementById('btnSteelhead'), salmon:document.getElementById('btnSalmon'), trout:document.getElementById('btnTrout'), perch:document.getElementById('btnPerch') };
 function setSpecies(sp, save=true){
   state.species = sp;
   Object.entries(speciesBtns).forEach(([k,b])=>b.classList.toggle('active',k===sp));
@@ -1164,6 +1167,38 @@ function calcDepthTarget(species, waterTempF, windMph, pressureSlope, now, w){
       reasoning = `${waterTempF.toFixed(0)}°F — good muskie temp. Cover weed edges, points, and transition zones.`;
       method = `Bucktail, large crankbait, or jerkbait at ${primaryFt} ft. Vary retrieve speed until fish respond.`;
     }
+  } else if(species === 'steelhead'){
+    // Steelhead are seasonal nearshore/river-mouth fish in Lake Michigan
+    const sMonth = now.getMonth()+1;
+    const springRun = sMonth>=3 && sMonth<=5;   // March–May
+    const fallRun   = sMonth>=9 && sMonth<=11;  // Sept–Nov
+    const onRun = springRun || fallRun;
+
+    if(waterTempF > 60){
+      // Too warm — steelhead go offshore or seek cold inflows
+      minFt = 20; maxFt = 45; primaryFt = 32;
+      if(thermoclineDepthFt){ primaryFt = thermoclineDepthFt - 4; minFt = primaryFt-5; maxFt = primaryFt+8; }
+      reasoning = `Surface at ${waterTempF.toFixed(0)}°F is too warm for nearshore steelhead — find cold inflows or fish offshore near the thermocline (est. ${thermoclineDepthFt||'—'} ft).`;
+      method = `Troll spoons or stickbaits at ${primaryFt} ft. Target temperature breaks and cold tributary plumes.`;
+    } else if(onRun && waterTempF >= 38 && waterTempF <= 52){
+      // Prime run conditions — fish the beach/creek mouths shallow
+      minFt = 1; maxFt = 12; primaryFt = 5;
+      reasoning = `${waterTempF.toFixed(0)}°F and ${springRun?'spring':'fall'} run season — steelhead staging at creek mouths and the beach. Prime window.`;
+      method = springRun
+        ? 'Cast spawn sacs, pink worms, or small spoons along the beach 1–8 ft. Creek mouths at first light.'
+        : 'Drift spawn sacs near creek mouths and river plumes. Surf casting with spoons on the beach.';
+    } else if(waterTempF < 38){
+      // Very cold — fish are deeper and lethargic
+      minFt = 8; maxFt = 25; primaryFt = 15;
+      reasoning = `Cold water (${waterTempF.toFixed(0)}°F) — steelhead holding deeper; slow down your presentation significantly.`;
+      method = `Small jigging spoon or spawn sac dead-drifted at ${primaryFt} ft. Slow and methodical.`;
+    } else {
+      // Normal cold-water season, not peak run
+      minFt = 3; maxFt = 18; primaryFt = 8;
+      reasoning = `${waterTempF.toFixed(0)}°F — steelhead active but not peaking. Target nearshore structure and current seams.`;
+      method = `Spoons, stick jigs, or spawn sacs at ${primaryFt} ft. Work along drop-offs and tributary plumes.`;
+    }
+
   } else if(species === 'perch'){
     if(waterTempF > 70){
       minFt = 15; maxFt = 30; primaryFt = 22;
@@ -1216,6 +1251,7 @@ const WEIGHTS={
   smallmouth:{pressure:0.28,wind:0.22,moon:0.20,temp:0.20,daylight:0.10},
   walleye:   {pressure:0.25,wind:0.20,moon:0.25,temp:0.20,daylight:0.10},
   muskie:    {pressure:0.20,wind:0.15,moon:0.35,temp:0.20,daylight:0.10},
+  steelhead: {pressure:0.30,wind:0.20,moon:0.15,temp:0.30,daylight:0.10},
   salmon:    {pressure:0.25,wind:0.15,moon:0.15,temp:0.35,daylight:0.10},
   trout:     {pressure:0.25,wind:0.15,moon:0.15,temp:0.35,daylight:0.10},
   perch:     {pressure:0.25,wind:0.20,moon:0.15,temp:0.25,daylight:0.15},
@@ -1233,6 +1269,7 @@ const SPECIES_TEMP={
   smallmouth:{center:62,upperMult:1.1,lowerMult:1.2},
   walleye:   {center:62,upperMult:1.4,lowerMult:1.0},
   muskie:    {center:65,upperMult:1.1,lowerMult:1.0},
+  steelhead: {center:50,upperMult:2.0,lowerMult:0.8}, // peak ~48–54°F, shuts down fast when warm
   salmon:    {center:54,upperMult:1.8,lowerMult:0.8},
   trout:     {center:58,upperMult:1.8,lowerMult:0.8},
   perch:     {center:60,upperMult:1.2,lowerMult:1.0},
@@ -1348,16 +1385,20 @@ function buildFactors(){
     smallmouth: moon.activity>0.85?'smallmouth push shallow and feed aggressively on new/full moon.':moon.activity>0.4?'moderate activity; rock breaks and current seams best.':'slower phase; ned rig or drop-shot on deeper rock is the move.',
     walleye:    moon.activity>0.85?'peak walleye movement — fish every transition edge, especially at dark.':moon.activity>0.4?'moderate feeding activity; dusk and dawn windows are critical.':'walleye tightest to cover; slow down and present right at the bottom.',
     muskie:     moon.activity>0.85?'legendary muskie moon — full and new moon move the biggest fish. Prime for night hunting.':moon.activity>0.4?'moderately active; cover water with large presentations.':'toughest muskie phase — slow down, use big blades or glide baits.',
+    steelhead:  moon.activity>0.85?'strong lunar period — steelhead tend to move and feed more aggressively near new/full moon.':moon.activity>0.4?'moderate lunar influence; focus on tide-like pressure changes and dawn windows.':'steelhead are more pressure-sensitive than moon-sensitive at this phase; watch the barometer.',
     salmon:     moon.activity>0.85?'strong lunar pull — salmon are more active, especially near dawn/dusk.':moon.activity>0.4?'moderate lunar influence; standard depths and trolling speed.':'low lunar activity; focus on temp breaks and thermocline depth.',
     trout:      moon.activity>0.85?'trout feed actively in strong lunar windows; low-light is prime.':moon.activity>0.4?'moderate trout activity; nymph or streamer near structure.':'quarter moon is the quietest phase — size down your presentation.',
     perch:      moon.activity>0.85?'perch schools move more freely; target open-water columns and structure edges.':moon.activity>0.4?'moderate perch activity; vertical jigging over drop-offs.':'perch are less moon-sensitive — focus on depth, temp, and bait schools.',
   };
   const moonNote=`${moon.name} (${Math.round(moon.illum*100)}% illuminated) — ${moonNoteBySpecies[sp]||'check lunar calendar for activity windows.'} ${solNote}`;
+  const month = now.getMonth()+1;
+  const isRunSeason = (month>=3&&month<=5)||(month>=9&&month<=11); // spring/fall steelhead run
   const tempNote={
     largemouth:waterTemp>80?'hot — largemouth go deep or nocturnal; target dawn/dusk edges.':waterTemp<55?'cool — slow metabolism; drop-shot or shaky head near bottom.':'in the ideal largemouth feeding window.',
     smallmouth:waterTemp>75?'warm — smallmouth push deeper or to current breaks.':waterTemp<50?'cold — slow presentation; ned rig or small tube on rock.':'prime smallmouth temp — rock structure and current seams are key.',
     walleye:waterTemp>72?'warm — move deeper or fish low-light windows.':waterTemp<48?'cold — walleye bite but slower presentations work better.':'prime walleye temp — rocky structure and transition zones.',
     muskie:waterTemp>76?'warm — muskie are most active 65–76°F; fish deep edges at dawn.':waterTemp<50?'cold — muskie go lethargic; slow down dramatically, try big jerkbaits.':'optimal muskie feeding window — cover water aggressively.',
+    steelhead:waterTemp>60?'too warm for nearshore steelhead — find cold inflows or go offshore deep.':waterTemp<40?`cold — steelhead are holding; ${isRunSeason?'fish slowly with spawn sacs near bottom':'look for sunny structure that warms fastest'}.`:`prime steelhead temp ${isRunSeason?'— run season, target creek mouths and nearshore structure':'— fish suspended mid-column or near inflows'}.`,
     salmon:waterTemp>65?'warm — seek thermocline, deep, or cold inflows.':waterTemp<42?'very cold — salmon sluggish; slow-troll or drift bait.':'good salmon temp — suspended bait near structure.',
     trout:waterTemp>66?'warm — shade, inflows, or deeper cooler water.':waterTemp<48?'cold — trout still feed, expect a slower retrieve.':'right in the window trout feed most actively.',
     perch:waterTemp>72?'warm — perch push deeper to cooler water; jigging over 15–25 ft.':waterTemp<45?'cold — perch still bite; minnow or ice-style jig near bottom.':'prime perch temp — structure edges and open-water schools.',
@@ -1406,6 +1447,8 @@ const STRUCTURES = [
       } else if(c.species==='walleye'){
         s += !isActiveWindow(c) ? 20 : 0; // walleye prefer low-light/dark at structure
         s += c.pressureSlope<=-0.15 ? 10 : 0;
+      } else if(c.species==='steelhead'){
+        s += c.waterTemp<=55 ? 20 : c.waterTemp>=62 ? -20 : 10; // cold = staging on points before creek push
       } else if(c.species==='trout'||c.species==='salmon'){
         s += c.waterTemp<=60 ? 15 : c.waterTemp>=68 ? -15 : 5;
       }
@@ -1417,6 +1460,7 @@ const STRUCTURES = [
       if(c.species==='largemouth'||c.species==='smallmouth') return c.waterTemp>=65?'Swim jig or drop-shot along the deep edge':'Crankbait parallel to the point';
       if(c.species==='walleye') return 'Jig slowly along the slope at dusk/dawn';
       if(c.species==='muskie') return 'Troll a large bucktail or jerkbait off the tip — muskie wait here to ambush';
+      if(c.species==='steelhead') return 'Cast spoons or stick jigs along the point — steelhead stage here before pushing to creek mouths';
       if(c.species==='perch') return 'Vertical jig with minnow off the edge where depth changes';
       return 'Spoon or streamer on the deeper side';
     },
@@ -1530,14 +1574,16 @@ const STRUCTURES = [
       if(c.waterTemp>=68) s += 20; // warm water = less O2, inflows critical
       if(c.pressureSlope<=-0.15) s += 15;
       if(c.species==='trout'||c.species==='salmon') s += 25;
+      if(c.species==='steelhead') s += 35; // steelhead run UP creek mouths — this is their #1 structure
       if(c.species==='walleye') s += 10;
-      if(c.species==='muskie') s += 15; // muskie ambush baitfish at creek mouths
+      if(c.species==='muskie') s += 15;
       const month = c.now.getMonth()+1;
       if(month>=3&&month<=5) s += 10; // spring runoff
       return Math.max(0,Math.min(100,s));
     },
     depth(c){ return '2–8 ft at the fan'; },
     technique(c){
+      if(c.species==='steelhead') return 'Cast spawn sacs, pink worms, or spoons into the current seam — steelhead stage right at the mouth';
       if(c.species==='trout'||c.species==='salmon') return 'Drift spawn sacs or stream nymphs in the current seam';
       if(c.species==='largemouth'||c.species==='smallmouth') return 'Swimbait or crankbait in the plume';
       return 'Live bait suspended below a float in the current';
@@ -1948,7 +1994,7 @@ function renderDepthTarget(ctx){
   const widthPct = (Math.min(maxScale,dt.maxFt) - Math.min(maxScale,dt.minFt))/maxScale*100;
   const tickPct  = fillPct(dt.primaryFt);
 
-  const speciesLabel = {largemouth:'Largemouth Bass',smallmouth:'Smallmouth Bass',walleye:'Walleye',muskie:'Muskie',salmon:'Salmon',trout:'Trout',perch:'Perch'}[state.species]||state.species;
+  const speciesLabel = {largemouth:'Largemouth Bass',smallmouth:'Smallmouth Bass',walleye:'Walleye',muskie:'Muskie',steelhead:'Steelhead',salmon:'Salmon',trout:'Trout',perch:'Perch'}[state.species]||state.species;
   const isBoat = state.mode === 'boat';
   const cardTitle = isBoat
     ? `🚤 ${speciesLabel} Depth Target — Open Water`
