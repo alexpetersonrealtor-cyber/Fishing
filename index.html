@@ -283,6 +283,18 @@
   /* export toolbar */
   .toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px;}
 
+  /* Spot quick-add */
+  .quick-add-section{margin-bottom:14px;}
+  .quick-add-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mist-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;}
+  .history-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .history-chip{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);color:var(--teal);cursor:pointer;transition:border-color 0.12s,background 0.12s;display:flex;align-items:center;gap:5px;max-width:100%;overflow:hidden;}
+  .history-chip:hover{border-color:var(--teal);background:rgba(61,191,191,0.08);}
+  .history-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .spot-map-btn{background:var(--surface-2);border:1px solid var(--teal);color:var(--teal);padding:9px 14px;border-radius:10px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;width:100%;justify-content:center;margin-bottom:10px;transition:background 0.12s;}
+  .spot-map-btn:hover{background:rgba(61,191,191,0.1);}
+  .spot-section-divider{display:flex;align-items:center;gap:8px;margin:12px 0;color:var(--mist-dim);font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;}
+  .spot-section-divider::before,.spot-section-divider::after{content:'';flex:1;height:1px;background:var(--line);}
+
   /* Map picker modal */
   .map-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(10,22,23,0.92);flex-direction:column;}
   .map-modal.open{display:flex;}
@@ -439,8 +451,19 @@
 
   <!-- ========== SPOTS TAB ========== -->
   <div id="pageSpots" style="display:none;">
+
+    <!-- Quick-add from recent searches -->
+    <div class="quick-add-section" id="quickAddSection" style="display:none;">
+      <div class="quick-add-label">Recent searches — tap to start</div>
+      <div class="history-chips" id="historyChips"></div>
+      <div class="spot-section-divider" style="margin-top:12px;">or fill in manually</div>
+    </div>
+
     <div class="panel">
       <h2 id="spotFormTitle">Add a Spot</h2>
+
+      <!-- Map pick button -->
+      <button class="spot-map-btn" id="spotMapBtn">🗺 Drop a Pin on Map</button>
 
       <div class="form-row">
         <label>Spot name</label>
@@ -449,7 +472,9 @@
 
       <div class="form-row">
         <label>Lake / water body</label>
-        <input type="text" id="spotLake" placeholder="e.g. Lake Winnebago" />
+        <div class="field-row">
+          <input type="text" id="spotLake" placeholder="e.g. Lake Winnebago" />
+        </div>
       </div>
 
       <div class="form-2col" style="margin-bottom:12px;">
@@ -468,11 +493,14 @@
 
       <div class="form-row">
         <label>Target species</label>
-        <div class="checkbox-row">
-          <label><input type="checkbox" class="spotSpecies" value="bass"> Bass</label>
+        <div class="checkbox-row" style="flex-wrap:wrap;gap:10px;">
+          <label><input type="checkbox" class="spotSpecies" value="largemouth"> LM Bass</label>
+          <label><input type="checkbox" class="spotSpecies" value="smallmouth"> SM Bass</label>
           <label><input type="checkbox" class="spotSpecies" value="walleye"> Walleye</label>
+          <label><input type="checkbox" class="spotSpecies" value="muskie"> Muskie</label>
           <label><input type="checkbox" class="spotSpecies" value="salmon"> Salmon</label>
           <label><input type="checkbox" class="spotSpecies" value="trout"> Trout</label>
+          <label><input type="checkbox" class="spotSpecies" value="perch"> Perch</label>
         </div>
       </div>
 
@@ -519,12 +547,15 @@
 
     <!-- Filter + export -->
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-      <div class="filter-bar" id="spotsFilter" style="margin-bottom:0;">
+      <div class="filter-bar" id="spotsFilter" style="margin-bottom:0;flex-wrap:wrap;">
         <button class="filter-chip active" data-filter="all">All</button>
-        <button class="filter-chip" data-filter="bass">Bass</button>
+        <button class="filter-chip" data-filter="largemouth">LM Bass</button>
+        <button class="filter-chip" data-filter="smallmouth">SM Bass</button>
         <button class="filter-chip" data-filter="walleye">Walleye</button>
+        <button class="filter-chip" data-filter="muskie">Muskie</button>
         <button class="filter-chip" data-filter="salmon">Salmon</button>
         <button class="filter-chip" data-filter="trout">Trout</button>
+        <button class="filter-chip" data-filter="perch">Perch</button>
       </div>
       <button class="btn-ghost" id="exportBtn" style="font-size:12px;padding:6px 10px;">⬇ Export</button>
     </div>
@@ -626,6 +657,7 @@
 let state = { species:'largemouth', coords:null, weather:null, manualWaterTemp:null, tripTarget:null, mode:'shore' };
 let spots = [];
 let trips = [];
+let searchHistory = []; // [{label, lat, lon}]
 let editingSpotId = null;
 let selectedStructures = [];
 let selectedDepth = null;
@@ -643,16 +675,24 @@ function persist(){
   try{
     localStorage.setItem('fishhawker:spots', JSON.stringify(spots));
     localStorage.setItem('fishhawker:trips', JSON.stringify(trips));
+    localStorage.setItem('fishhawker:history', JSON.stringify(searchHistory));
     localStorage.setItem('fishhawker:prefs', JSON.stringify({
       location: document.getElementById('locInput').value,
       species: state.species
     }));
   }catch(e){}
 }
+function pushHistory(label, lat, lon){
+  searchHistory = searchHistory.filter(h => h.label !== label);
+  searchHistory.unshift({label, lat, lon});
+  if(searchHistory.length > 8) searchHistory = searchHistory.slice(0,8);
+  persist();
+}
 function loadData(){
   try{
     const s = localStorage.getItem('fishhawker:spots'); if(s) spots = JSON.parse(s);
     const t = localStorage.getItem('fishhawker:trips'); if(t) trips = JSON.parse(t);
+    const h = localStorage.getItem('fishhawker:history'); if(h) searchHistory = JSON.parse(h);
     const p = localStorage.getItem('fishhawker:prefs');
     if(p){
       const prefs = JSON.parse(p);
@@ -674,7 +714,7 @@ function switchTab(name){
   Object.values(tabs).forEach(t=>t.classList.remove('active'));
   pages[name].style.display='block';
   tabs[name].classList.add('active');
-  if(name==='spots'){ renderSpotsList(); }
+  if(name==='spots'){ renderSpotsList(); renderSearchHistory(); }
   if(name==='log'){ populateLogSpotSelect(); renderLogList(); renderStats(); }
 }
 tabs.forecast.addEventListener('click', ()=>switchTab('forecast'));
@@ -2045,6 +2085,7 @@ async function runSearch(q){
   try{
     loc=await geocode(q);
     document.getElementById('locResult').textContent=`📍 ${loc.label}`;
+    pushHistory(loc.label, loc.lat, loc.lon);
   }catch(e){
     if(e.message && e.message.startsWith('NOTFOUND:')){
       const name = e.message.slice(9);
@@ -2160,6 +2201,34 @@ document.getElementById('depthGrid').addEventListener('click',e=>{
   document.querySelectorAll('.depth-chip').forEach(x=>x.classList.remove('active'));
   selectedDepth=selectedDepth===c.dataset.depth?null:c.dataset.depth;
   if(selectedDepth) c.classList.add('active');
+});
+
+// Search history chips
+function renderSearchHistory(){
+  const section = document.getElementById('quickAddSection');
+  const container = document.getElementById('historyChips');
+  if(!searchHistory.length){ section.style.display='none'; return; }
+  section.style.display='block';
+  container.innerHTML = searchHistory.map((h,i) => `
+    <button class="history-chip" data-i="${i}" title="${esc(h.label)}">
+      <span>📍</span><span class="history-chip-name">${esc(h.label)}</span>
+    </button>`).join('');
+}
+document.getElementById('historyChips').addEventListener('click', e => {
+  const btn = e.target.closest('.history-chip'); if(!btn) return;
+  const h = searchHistory[+btn.dataset.i]; if(!h) return;
+  // Pre-fill the spot form with this location
+  const parts = h.label.split(',');
+  document.getElementById('spotLake').value = parts[0].trim();
+  document.getElementById('spotLat').value = h.lat;
+  document.getElementById('spotLon').value = h.lon;
+  document.getElementById('spotName').focus();
+  document.getElementById('spotName').scrollIntoView({behavior:'smooth',block:'start'});
+});
+
+// Spot map picker button — opens map modal in spot mode
+document.getElementById('spotMapBtn').addEventListener('click', () => {
+  window._openMapForSpot && window._openMapForSpot();
 });
 
 // Species filter
@@ -2806,7 +2875,7 @@ renderSpotsList();
   const confirmBtn = document.getElementById('mapConfirmBtn');
   const coordsEl  = document.getElementById('mapPinCoords');
 
-  let map = null, marker = null, pickedLat = null, pickedLon = null;
+  let map = null, marker = null, pickedLat = null, pickedLon = null, spotMode = false;
 
   function initMap(){
     if(map) return;
@@ -2856,17 +2925,44 @@ renderSpotsList();
     const ov = document.getElementById('structOverlay');
     if(ov) ov.remove();
     clearStructLayers();
+    if(spotMode){ spotMode=false; confirmBtn.textContent='Use This Spot'; }
   }
 
   confirmBtn.addEventListener('click', () => {
     if(pickedLat === null) return;
-    const coords = `${pickedLat}, ${pickedLon}`;
-    document.getElementById('locInput').value = coords;
-    closeModal();
-    runSearch(coords);
+    if(spotMode){
+      // Fill spot form lat/lon and switch to spots tab
+      document.getElementById('spotLat').value = pickedLat;
+      document.getElementById('spotLon').value = pickedLon;
+      closeModal();
+      spotMode = false;
+      confirmBtn.textContent = 'Use This Spot';
+      document.getElementById('spotName').focus();
+    } else {
+      const coords = `${pickedLat}, ${pickedLon}`;
+      document.getElementById('locInput').value = coords;
+      closeModal();
+      runSearch(coords);
+    }
   });
 
-  openBtn.addEventListener('click', openModal);
+  openBtn.addEventListener('click', () => { spotMode = false; openModal(); });
+
+  // Spot-mode entry point: open map to pin a spot (fills spot form on confirm)
+  window._openMapForSpot = function(){
+    spotMode = true;
+    pickedLat = null; pickedLon = null;
+    confirmBtn.textContent = 'Use as Spot Location';
+    confirmBtn.classList.remove('ready');
+    coordsEl.textContent = '';
+    modal.classList.add('open');
+    initMap();
+    // Prefer last spot coords, then current forecast location
+    const lastSpot = spots.length ? spots[spots.length-1] : null;
+    if(lastSpot?.lat && lastSpot?.lon) map.setView([lastSpot.lat, lastSpot.lon], 13);
+    else if(state.coords) map.setView([state.coords.lat, state.coords.lon], 13);
+    setTimeout(() => map.invalidateSize(), 50);
+  };
   closeBtn.addEventListener('click', closeModal);
   // Close on backdrop tap (outside the modal card)
   modal.addEventListener('click', e => { if(e.target === modal) closeModal(); });
