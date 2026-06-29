@@ -195,6 +195,7 @@
   .struct-overlay-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--amber);margin-bottom:4px;}
   .struct-overlay-sub{font-size:12px;color:var(--mist-dim);line-height:1.5;margin-bottom:10px;}
   .struct-diagram{width:100%;border-radius:8px;overflow:hidden;}
+  .struct-tip.leaflet-tooltip{background:#122C2E!important;border:1px solid #E0A53D!important;color:#ECE7DB!important;font-family:monospace!important;font-size:11px!important;border-radius:6px!important;white-space:nowrap;}
 
   .empty-state{text-align:center;padding:32px 16px;color:var(--mist-dim);font-size:14px;line-height:1.7;}
   .empty-state .big{font-size:32px;display:block;margin-bottom:8px;}
@@ -1398,26 +1399,164 @@ const STRUCT_DIAGRAMS = {
   </svg>`,
 };
 
-function openStructureMap(structId, structName, lookFor){
-  const lat = state.coords?.lat, lon = state.coords?.lon;
-  window._openMapModal ? window._openMapModal(lat, lon, 14) : document.getElementById('mapPickerBtn').click();
+// Offset a lat/lon by meters north/east
+function offsetLatLon(lat, lon, northM, eastM){
+  return [lat + northM/111320, lon + eastM/(111320*Math.cos(lat*Math.PI/180))];
+}
 
-  // Attach diagram overlay after map opens
+// Draw Leaflet highlight layers for a structure type centered on [lat,lon]
+function drawStructureLayers(map, structId, lat, lon){
+  const layers = [];
+  const A = '#E0A53D', B = '#3DBFBF', G = '#7C8A52';
+  const ring  = (c,r,color,w=2,dash='') => L.circle(c,{radius:r,color,weight:w,fillColor:color,fillOpacity:0.12,dashArray:dash});
+  const poly  = (pts,color) => L.polygon(pts,{color,weight:2,fillColor:color,fillOpacity:0.18});
+  const line  = (pts,color,w=2,dash='') => L.polyline(pts,{color,weight:w,dashArray:dash});
+  const pin   = (c,color,label) => {
+    const ic = L.divIcon({
+      html:`<div style="background:${color};border:2px solid #122C2E;border-radius:50%;width:14px;height:14px;box-shadow:0 1px 4px rgba(0,0,0,0.6);"></div>`,
+      iconSize:[14,14],iconAnchor:[7,7],className:''
+    });
+    const m = L.marker(c,{icon:ic});
+    if(label) m.bindTooltip(label,{permanent:true,direction:'top',offset:[0,-10],className:'struct-tip'});
+    return m;
+  };
+
+  if(structId==='point'){
+    const tip  = offsetLatLon(lat,lon,0,120);
+    const bl   = offsetLatLon(lat,lon,-80,-20);
+    const tl   = offsetLatLon(lat,lon,80,-20);
+    layers.push(poly([bl,tip,tl], G));
+    layers.push(ring(tip, 35, A, 3));
+    layers.push(pin(tip, A, 'Cast here'));
+    layers.push(line([offsetLatLon(lat,lon,0,160), offsetLatLon(lat,lon,0,220)], B, 2, '5,4'));
+    layers.push(pin(offsetLatLon(lat,lon,0,190), B, 'Deep water'));
+  } else if(structId==='dropoff'){
+    layers.push(ring([lat,lon], 40, G, 2));
+    layers.push(ring([lat,lon], 80, A, 3));
+    layers.push(ring([lat,lon], 140, B, 2, '6,4'));
+    layers.push(pin([lat,lon], G, 'Shallow'));
+    layers.push(pin(offsetLatLon(lat,lon,80,0), A, 'Fish the break'));
+    layers.push(pin(offsetLatLon(lat,lon,140,0), B, 'Deep'));
+  } else if(structId==='weed_edge'){
+    const pts = [-80,-60,-30,0,30,60,80].map((dx,i)=>offsetLatLon(lat,lon,dx*1.2, 40+(i%2)*25));
+    layers.push(line(pts, G, 3));
+    layers.push(ring(offsetLatLon(lat,lon,0,40), 20, G, 2));
+    layers.push(pin(offsetLatLon(lat,lon,0,60), A, 'Outside edge'));
+    layers.push(pin(offsetLatLon(lat,lon,40,20), A, 'Pocket'));
+    layers.push(ring(offsetLatLon(lat,lon,-50,0), 60, G, 1, '4,4'));
+    layers.push(pin(offsetLatLon(lat,lon,-50,0), G, 'Weed flat'));
+  } else if(structId==='cove'){
+    const pts = [
+      offsetLatLon(lat,lon,-100,-60),
+      offsetLatLon(lat,lon,-60,0),
+      offsetLatLon(lat,lon,0,80),
+      offsetLatLon(lat,lon,60,0),
+      offsetLatLon(lat,lon,100,-60),
+    ];
+    layers.push(poly(pts, G));
+    layers.push(ring([lat,lon], 45, A, 3));
+    layers.push(pin([lat,lon], A, 'Warm water — fish here'));
+    layers.push(pin(offsetLatLon(lat,lon,0,-30), B, 'Cove mouth'));
+  } else if(structId==='rocky_bank'){
+    const bankPts = [-120,-80,-40,0,40,80,120].map(dy=>offsetLatLon(lat,lon,dy,-30+(dy%40===0?15:0)));
+    layers.push(line(bankPts, '#aaa', 3));
+    [[-90,0],[-30,10],[30,-5],[90,5]].forEach(([dy,dx])=>{
+      layers.push(ring(offsetLatLon(lat,lon,dy,dx+40), 18, A, 2));
+    });
+    layers.push(pin(offsetLatLon(lat,lon,0,40), A, 'Work bait tight to face'));
+  } else if(structId==='inflow'){
+    layers.push(line([offsetLatLon(lat,lon,120,0),offsetLatLon(lat,lon,0,0)], B, 3));
+    const fan = [
+      offsetLatLon(lat,lon,-30,-60),
+      offsetLatLon(lat,lon,-60,0),
+      offsetLatLon(lat,lon,-30,60),
+    ];
+    layers.push(poly(fan, B));
+    layers.push(ring(offsetLatLon(lat,lon,-40,0), 50, A, 3));
+    layers.push(pin(offsetLatLon(lat,lon,-40,0), A, 'Fan/plume — fish here'));
+    layers.push(pin(offsetLatLon(lat,lon,60,0), B, 'Current seam'));
+  } else if(structId==='flat'){
+    layers.push(ring([lat,lon], 120, G, 1, '5,5'));
+    layers.push(ring([lat,lon], 60, G, 2, '5,5'));
+    [[40,40],[-50,20],[10,-60]].forEach(([dy,dx])=>{
+      layers.push(pin(offsetLatLon(lat,lon,dy,dx), A, 'Active at dawn/dusk'));
+    });
+    layers.push(ring([lat,lon], 130, B, 1, '4,6'));
+    layers.push(pin(offsetLatLon(lat,lon,-130,0), B, 'Drop-off edge'));
+  } else if(structId==='laydown'){
+    const trunk = [offsetLatLon(lat,lon,0,-60), offsetLatLon(lat,lon,0,60)];
+    layers.push(line(trunk, '#8B5E3C', 5));
+    [[-30,-15],[-10,10],[20,-5],[40,15]].forEach(([dy,dx])=>{
+      layers.push(line([offsetLatLon(lat,lon,dy,dx),offsetLatLon(lat,lon,dy-20,dx+10)],'#6B4E3C',2));
+    });
+    layers.push(ring(offsetLatLon(lat,lon,0,30), 25, A, 3));
+    layers.push(pin(offsetLatLon(lat,lon,0,30), A, 'Flip to trunk'));
+    layers.push(pin(offsetLatLon(lat,lon,0,-40), G, 'Root ball end'));
+  } else if(structId==='dock'){
+    const dockPts = [
+      offsetLatLon(lat,lon,-15,-20),
+      offsetLatLon(lat,lon,-15,60),
+      offsetLatLon(lat,lon,15,60),
+      offsetLatLon(lat,lon,15,-20),
+    ];
+    layers.push(poly(dockPts,'#8B6914'));
+    layers.push(ring(offsetLatLon(lat,lon,0,55), 22, A, 3));
+    layers.push(pin(offsetLatLon(lat,lon,0,55), A, 'Skip to back third'));
+    layers.push(pin(offsetLatLon(lat,lon,0,-25), G, 'Open water'));
+  }
+
+  layers.forEach(l => l.addTo(map));
+  return layers;
+}
+
+// Track active structure highlight layers
+let _structLayers = [];
+
+function clearStructLayers(){
+  if(window._leafletMap) _structLayers.forEach(l => { try{ window._leafletMap.removeLayer(l); }catch(e){} });
+  _structLayers = [];
+}
+
+function openStructureMap(structId, structName, lookFor){
+  const lat = state.coords?.lat ?? 42.0;
+  const lon = state.coords?.lon ?? -88.0;
+  window._openMapModal ? window._openMapModal(lat, lon, 15) : document.getElementById('mapPickerBtn').click();
+
   setTimeout(() => {
+    // Clear previous layers
+    clearStructLayers();
+
+    // Draw highlight layers on the live map
+    if(window._leafletMap){
+      _structLayers = drawStructureLayers(window._leafletMap, structId, lat, lon);
+    }
+
+    // Show diagram overlay with a dismiss button
     const existing = document.getElementById('structOverlay');
     if(existing) existing.remove();
     const overlay = document.createElement('div');
     overlay.id = 'structOverlay';
     overlay.className = 'struct-map-overlay';
+    overlay.style.pointerEvents = 'auto';
     overlay.innerHTML = `
-      <div class="struct-overlay-title">${structName}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+        <div class="struct-overlay-title">${structName}</div>
+        <button id="dismissDiagram" style="background:none;border:none;color:var(--mist-dim);font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1;">✕</button>
+      </div>
       <div class="struct-overlay-sub">${lookFor}</div>
+      <div class="struct-overlay-sub" style="color:var(--amber);margin-top:4px;">🟡 Highlighted zones show target areas on your lake — tap the map to drop a pin.</div>
       <div class="struct-diagram">${STRUCT_DIAGRAMS[structId] || ''}</div>`;
     const mapEl = document.getElementById('leafletMap');
     mapEl.style.position = 'relative';
     mapEl.appendChild(overlay);
+
+    document.getElementById('dismissDiagram').addEventListener('click', e => {
+      e.stopPropagation();
+      overlay.remove();
+    });
+
     window._leafletMap && window._leafletMap.invalidateSize();
-  }, 80);
+  }, 100);
 }
 
 function renderStructureGuide(ctx){
@@ -2252,6 +2391,7 @@ renderSpotsList();
     modal.classList.remove('open');
     const ov = document.getElementById('structOverlay');
     if(ov) ov.remove();
+    clearStructLayers();
   }
 
   confirmBtn.addEventListener('click', () => {
