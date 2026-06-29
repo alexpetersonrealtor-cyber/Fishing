@@ -974,6 +974,12 @@ function renderScore(){
   document.getElementById('meterPanel').style.display='flex';
   document.getElementById('factorsPanel').style.display='block';
   renderConditionSpots(weatherCtx, total);
+
+  // Trigger buoy load if boat mode is active for a known large lake
+  const lake = detectLake(document.getElementById('locInput').value);
+  if(lake && document.getElementById('boatModeToggle').checked) {
+    loadBuoyForCurrentLake();
+  }
 }
 
 // ============================================================
@@ -1611,17 +1617,7 @@ function computeWaypoint() {
     </div>`;
 }
 
-// Trigger buoy load whenever a search completes for a known lake
-const _origRunSearch = runSearch;
-// (hook into renderScore to detect large lakes after load)
-const _origRenderScore = renderScore;
-function renderScore(){
-  _origRenderScore();
-  const lake = detectLake(document.getElementById('locInput').value);
-  if(lake && document.getElementById('boatModeToggle').checked) {
-    loadBuoyForCurrentLake();
-  }
-}
+// (boat mode buoy load is handled inside renderScore directly)
 
 // ============================================================
 //  PWA SERVICE WORKER
