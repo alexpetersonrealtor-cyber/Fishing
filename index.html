@@ -299,6 +299,25 @@
   /* export toolbar */
   .toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px;}
 
+  /* Bite alerts */
+  .bite-alerts-section{margin-bottom:16px;}
+  .bite-alerts-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .bite-alerts-title{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--amber);}
+  .bite-alert-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:border-color 0.15s;}
+  .bite-alert-card:hover{border-color:var(--amber);}
+  .bite-alert-card.prime{border-color:rgba(224,165,61,0.6);background:rgba(224,165,61,0.05);}
+  .bite-alert-card.good{border-color:rgba(124,138,82,0.5);}
+  .bite-alert-score-wrap{display:flex;flex-direction:column;align-items:center;min-width:44px;}
+  .bite-alert-score{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;line-height:1;color:var(--amber);}
+  .bite-alert-score.good{color:var(--moss);}
+  .bite-alert-score-label{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mist-dim);text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;}
+  .bite-alert-body{flex:1;min-width:0;}
+  .bite-alert-spot{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;color:var(--mist);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bite-alert-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist-dim);display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;}
+  .bite-alert-why{font-size:12px;color:var(--mist-dim);line-height:1.45;}
+  .bite-alerts-loading{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist-dim);padding:8px 0;display:flex;align-items:center;gap:6px;}
+  .notif-btn{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 9px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line);color:var(--amber);cursor:pointer;}
+
   /* Spot quick-add */
   .quick-add-section{margin-bottom:14px;}
   .quick-add-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mist-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;}
@@ -468,6 +487,15 @@
 
   <!-- ========== SPOTS TAB ========== -->
   <div id="pageSpots" style="display:none;">
+
+    <!-- Bite forecast alerts -->
+    <div class="bite-alerts-section" id="biteAlertsSection" style="display:none;">
+      <div class="bite-alerts-header">
+        <div class="bite-alerts-title">🔔 Upcoming Bite Windows</div>
+        <button class="notif-btn" id="notifPermBtn" style="display:none;">Enable Notifications</button>
+      </div>
+      <div id="biteAlertsList"></div>
+    </div>
 
     <!-- Quick-add from recent searches -->
     <div class="quick-add-section" id="quickAddSection" style="display:none;">
@@ -733,7 +761,7 @@ function switchTab(name){
   Object.values(tabs).forEach(t=>t.classList.remove('active'));
   pages[name].style.display='block';
   tabs[name].classList.add('active');
-  if(name==='spots'){ renderSpotsList(); renderSearchHistory(); }
+  if(name==='spots'){ renderSpotsList(); renderSearchHistory(); loadAndRenderAlerts(); }
   if(name==='log'){ populateLogSpotSelect(); renderLogList(); renderStats(); }
 }
 tabs.forecast.addEventListener('click', ()=>switchTab('forecast'));
@@ -2352,6 +2380,178 @@ document.getElementById('depthGrid').addEventListener('click',e=>{
   document.querySelectorAll('.depth-chip').forEach(x=>x.classList.remove('active'));
   selectedDepth=selectedDepth===c.dataset.depth?null:c.dataset.depth;
   if(selectedDepth) c.classList.add('active');
+});
+
+// ============================================================
+//  BITE FORECAST ALERTS
+// ============================================================
+const ALERT_CACHE_KEY = 'fishhawker:bite-cache';
+const ALERT_TTL_MS = 2 * 60 * 60 * 1000; // re-fetch every 2h
+
+// Score a single hourly slot for a species using existing scoring primitives
+function quickScore(sp, w, hourIdx){
+  const wind  = w.hourly.wind_speed_10m?.[hourIdx] ?? 10;
+  const wDir  = w.hourly.wind_direction_10m?.[hourIdx] ?? 0;
+  const pt    = pressureTrend(w, hourIdx);
+  const date  = new Date(w.hourly.time[hourIdx]);
+  const moon  = moonPhase(date);
+
+  // Estimate water temp from rolling 24h air temp average
+  const slice = w.hourly.temperature_2m?.slice(Math.max(0, hourIdx-24), hourIdx+1).filter(v=>v!=null) || [];
+  const waterTemp = slice.length ? slice.reduce((a,b)=>a+b,0)/slice.length - 4 : 65;
+
+  // Pick sunrise/sunset for this day
+  const dayStr = w.hourly.time[hourIdx].slice(0,10);
+  const di = (w.daily?.time||[]).findIndex(t=>t===dayStr);
+  const dayI = di>=0 ? di : 0;
+  const sunrise = new Date(w.daily.sunrise[dayI]);
+  const sunset  = new Date(w.daily.sunset[dayI]);
+
+  const wts = WEIGHTS[sp] || WEIGHTS.largemouth;
+  const pScore = pressureScore(pt.slope, pt.current);
+  const wScore = windScore(wind);
+  const mScore = moonScore(moon, sp);
+  const tScore = tempScore(waterTemp, sp);
+  const dScore = daylightScore(date, sunrise, sunset);
+
+  const total = Math.round(pScore*wts.pressure + wScore*wts.wind + mScore*wts.moon + tScore*wts.temp + dScore*wts.daylight);
+
+  // Best-condition summary for display
+  const topFactors = [
+    {name:'Pressure', score:pScore*wts.pressure, note:pt.slope<=-0.15?'dropping — pre-front feed':'stable'},
+    {name:'Moon',     score:mScore*wts.moon,      note:moon.name},
+    {name:'Temp',     score:tScore*wts.temp,       note:`${waterTemp.toFixed(0)}°F est.`},
+    {name:'Wind',     score:wScore*wts.wind,       note:`${wind.toFixed(0)} mph`},
+  ].sort((a,b)=>b.score-a.score);
+
+  return { total, waterTemp, wind, moon, topFactors, sunrise, sunset };
+}
+
+async function fetchBiteAlerts(){
+  // Rate-limit: skip if we fetched recently
+  try {
+    const cached = JSON.parse(localStorage.getItem(ALERT_CACHE_KEY)||'null');
+    if(cached && Date.now() - cached.ts < ALERT_TTL_MS) return cached.alerts;
+  } catch(e){}
+
+  const eligible = spots.filter(s => s.lat && s.lon && s.species?.length);
+  if(!eligible.length) return [];
+
+  const alerts = [];
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Limit to 6 spots to avoid hammering the API
+  for(const spot of eligible.slice(0,6)){
+    try {
+      const w = await fetchWeather(spot.lat, spot.lon, 8);
+
+      for(const sp of spot.species){
+        // Check each day 1–7 days out; use 7am as the representative hour
+        for(let dayOffset = 1; dayOffset <= 7; dayOffset++){
+          const checkDate = new Date(today);
+          checkDate.setDate(today.getDate() + dayOffset);
+          const dayStr = checkDate.toISOString().slice(0,10);
+          const target  = `${dayStr}T07`;
+          let hourIdx = w.hourly.time.findIndex(t=>t.startsWith(target));
+          if(hourIdx === -1) continue;
+
+          const { total, waterTemp, wind, moon, topFactors, sunrise } = quickScore(sp, w, hourIdx);
+          if(total < 65) continue; // only surface Good+ days
+
+          const label = total >= 80 ? 'Prime' : total >= 72 ? 'Good' : 'Fair+';
+          const spLabel = {largemouth:'LM Bass',smallmouth:'SM Bass',walleye:'Walleye',muskie:'Muskie',steelhead:'Steelhead',salmon:'Salmon',trout:'Trout',perch:'Perch'}[sp]||sp;
+          const dayLabel = dayOffset===1?'Tomorrow':checkDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+          const why = topFactors.slice(0,2).map(f=>`${f.name}: ${f.note}`).join(' · ');
+
+          alerts.push({ spotId:spot.id, spotName:spot.name, lake:spot.lake, lat:spot.lat, lon:spot.lon, sp, spLabel, dayOffset, dayLabel, checkDate:checkDate.toISOString(), score:total, label, why, waterTemp, wind, moon:moon.name });
+        }
+      }
+    } catch(e){ /* skip spot if API fails */ }
+  }
+
+  // Dedupe: keep best score per spot+species+day
+  const seen = new Map();
+  const deduped = alerts.filter(a => {
+    const k = `${a.spotId}|${a.sp}|${a.dayOffset}`;
+    if(seen.has(k) && seen.get(k).score >= a.score) return false;
+    seen.set(k, a); return true;
+  }).sort((a,b) => a.dayOffset - b.dayOffset || b.score - a.score).slice(0,12);
+
+  try { localStorage.setItem(ALERT_CACHE_KEY, JSON.stringify({ts:Date.now(), alerts:deduped})); } catch(e){}
+  return deduped;
+}
+
+function renderBiteAlerts(alerts){
+  const section = document.getElementById('biteAlertsSection');
+  const list    = document.getElementById('biteAlertsList');
+  if(!alerts || !alerts.length){ section.style.display='none'; return; }
+
+  section.style.display = 'block';
+
+  // Show notification enable button if not yet granted
+  const notifBtn = document.getElementById('notifPermBtn');
+  if('Notification' in window && Notification.permission === 'default'){
+    notifBtn.style.display = 'inline-block';
+  } else {
+    notifBtn.style.display = 'none';
+  }
+
+  list.innerHTML = alerts.map(a => `
+    <div class="bite-alert-card ${a.label==='Prime'?'prime':a.label==='Good'?'good':''}" onclick="fishThisSpot('${esc(a.lake||a.spotName)}')">
+      <div class="bite-alert-score-wrap">
+        <div class="bite-alert-score ${a.label!=='Prime'?'good':''}">${a.score}</div>
+        <div class="bite-alert-score-label">${a.label}</div>
+      </div>
+      <div class="bite-alert-body">
+        <div class="bite-alert-spot">${esc(a.spotName)}</div>
+        <div class="bite-alert-meta">
+          <span>📅 ${a.dayLabel}</span>
+          <span>🐟 ${a.spLabel}</span>
+          ${a.lake?`<span>📍 ${esc(a.lake)}</span>`:''}
+        </div>
+        <div class="bite-alert-why">${a.why} · ${a.moon}</div>
+      </div>
+    </div>`).join('');
+}
+
+async function loadAndRenderAlerts(){
+  const list    = document.getElementById('biteAlertsList');
+  const section = document.getElementById('biteAlertsSection');
+  const eligible = spots.filter(s => s.lat && s.lon && s.species?.length);
+  if(!eligible.length){ section.style.display='none'; return; }
+
+  // Show a loading state if nothing cached yet
+  const cached = JSON.parse(localStorage.getItem(ALERT_CACHE_KEY)||'null');
+  if(!cached){
+    section.style.display='block';
+    list.innerHTML='<div class="bite-alerts-loading">⏳ Checking upcoming forecast for your spots…</div>';
+  } else {
+    renderBiteAlerts(cached.alerts);
+  }
+
+  const alerts = await fetchBiteAlerts();
+  renderBiteAlerts(alerts);
+
+  // Fire a browser notification once per session for Prime days within 3 days
+  if('Notification' in window && Notification.permission === 'granted'){
+    const primeNear = alerts.find(a => a.label==='Prime' && a.dayOffset <= 3);
+    if(primeNear && !sessionStorage.getItem('fh:notified')){
+      sessionStorage.setItem('fh:notified','1');
+      new Notification('🎣 Fish Hawker — Prime Bite Coming!', {
+        body: `${primeNear.dayLabel}: ${primeNear.spotName} looks prime for ${primeNear.spLabel} (score ${primeNear.score}). ${primeNear.why}.`,
+        icon: 'icon-192.png',
+        tag: 'fh-bite-alert',
+      });
+    }
+  }
+}
+
+// Request notification permission
+document.getElementById('notifPermBtn').addEventListener('click', async () => {
+  if(!('Notification' in window)) return;
+  const perm = await Notification.requestPermission();
+  document.getElementById('notifPermBtn').style.display = perm === 'granted' ? 'none' : 'inline-block';
+  if(perm === 'granted') loadAndRenderAlerts();
 });
 
 // Search history chips
