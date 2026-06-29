@@ -2531,34 +2531,6 @@ const LARGE_LAKES = {
   },
 };
 
-// Species depth preferences by water surface temp (°F)
-// Returns { minFt, maxFt, strategy, trollSpeed }
-function speciesDepthTarget(species, surfaceTempF) {
-  const t = surfaceTempF;
-  switch(species) {
-    case 'salmon':
-      if(t < 48) return { minFt:20,  maxFt:50,  strategy:'Cold water — salmon near surface. Troll at 2–2.5 mph with spoons or stick baits.', trollSpeed:'2–2.5 mph' };
-      if(t < 58) return { minFt:30,  maxFt:70,  strategy:'Spring temp break — target the 30–70 ft zone. Salmon follow baitfish just below the warm layer.', trollSpeed:'2–2.5 mph' };
-      if(t < 65) return { minFt:50,  maxFt:100, strategy:'Thermocline forming — fish 50–100 ft where temp drops sharply. Spoons and paddle-flasher rigs.', trollSpeed:'2.5–3 mph' };
-      if(t < 72) return { minFt:80,  maxFt:140, strategy:'Surface too warm — fish 80–140 ft at the thermocline. Use downriggers or Dipsy Divers.', trollSpeed:'2.5–3 mph' };
-      return                { minFt:120, maxFt:200, strategy:'Hot surface — thermocline is deep. Target 120–200 ft with full-core line or heavy downriggers.', trollSpeed:'2.5–3.5 mph' };
-    case 'trout':
-      if(t < 50) return { minFt:15,  maxFt:40,  strategy:'Lake trout near surface in cold water. Jig over hard structure or troll shallow.', trollSpeed:'1.5–2 mph' };
-      if(t < 62) return { minFt:40,  maxFt:80,  strategy:'Prime lake trout temp — fish 40–80 ft over rocky structure and hard bottom transitions.', trollSpeed:'2–2.5 mph' };
-      if(t < 70) return { minFt:70,  maxFt:130, strategy:'Trout pushed deeper by surface warmth — target 70–130 ft with flasher-fly rigs.', trollSpeed:'2–2.5 mph' };
-      return                { minFt:110, maxFt:180, strategy:'Hot conditions — lake trout hugging the thermocline bottom at 110–180 ft.', trollSpeed:'2–2.5 mph' };
-    case 'walleye':
-      if(t < 50) return { minFt:15, maxFt:35, strategy:'Cold walleye — slow retrieve near bottom over sand/rock transition.', trollSpeed:'1–1.5 mph' };
-      if(t < 65) return { minFt:12, maxFt:30, strategy:'Prime walleye range — troll crawler harnesses or stick baits over transition structure at dawn/dusk.', trollSpeed:'1.2–1.8 mph' };
-      return               { minFt:20, maxFt:45, strategy:'Warm surface — walleye slide deeper. Target 20–45 ft over hard structure on low-light windows.', trollSpeed:'1.2–1.8 mph' };
-    case 'bass':
-    default:
-      if(t < 55) return { minFt:8,  maxFt:20, strategy:'Cool bass — work 8–20 ft over drop-offs and rock structure with slower presentations.', trollSpeed:'casting' };
-      if(t < 75) return { minFt:5,  maxFt:18, strategy:'Prime bass temp — target 5–18 ft near weed edges, rocky points, and wave-washed shoreline.', trollSpeed:'casting' };
-      return               { minFt:15, maxFt:35, strategy:'Hot surface — bass pushed to 15–35 ft in open water or shaded/deep structure.', trollSpeed:'casting' };
-  }
-}
-
 // Calculate destination GPS from start + bearing + distance
 function destPoint(lat, lon, bearingDeg, distMiles) {
   const R = 3958.8;
@@ -2827,7 +2799,15 @@ function computeWaypoint() {
   })();
   const sp = state.species;
 
-  const depth = speciesDepthTarget(sp, waterTemp);
+  // Use the same calcDepthTarget that powers the depth card so both agree
+  const _dt = calcDepthTarget(sp, waterTemp, w.current.wind_speed_10m, 0, new Date(w.current.time), w);
+  const trollSpeedBySpecies = { salmon:'2–3 mph', steelhead:'2–2.5 mph', trout:'2–2.5 mph', walleye:'1.2–1.8 mph', largemouth:'casting', smallmouth:'casting', muskie:'2.5–4 mph', perch:'0.8–1.2 mph' };
+  const depth = {
+    minFt: _dt.minFt,
+    maxFt: _dt.maxFt,
+    strategy: _dt.reasoning + (_dt.method ? ' ' + _dt.method : ''),
+    trollSpeed: trollSpeedBySpecies[sp] || '2–3 mph',
+  };
 
   let dist, bearing, wpLat, wpLon, lakeNotes, depthModel;
 
