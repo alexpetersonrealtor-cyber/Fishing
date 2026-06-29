@@ -1,4 +1,4 @@
-const CACHE = 'contour-v4';
+const CACHE = 'contour-v5';
 const PRECACHE = [
   '/',
   '/index.html',
