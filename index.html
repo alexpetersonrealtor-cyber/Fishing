@@ -173,6 +173,19 @@
   .rec-top{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
   .rec-top::before{content:'★';}
 
+  /* Structure / topo guide cards */
+  .struct-card{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:grid;grid-template-columns:40px 1fr auto;gap:10px;align-items:start;}
+  .struct-card.hot{border-color:var(--amber);}
+  .struct-card.warm{border-color:var(--moss);}
+  .struct-icon{font-size:22px;line-height:1;padding-top:2px;}
+  .struct-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;color:var(--mist);margin-bottom:2px;}
+  .struct-why{font-size:12px;color:var(--mist-dim);line-height:1.5;}
+  .struct-depth{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--teal);margin-top:4px;}
+  .struct-technique{font-size:11px;color:var(--moss);margin-top:3px;font-style:italic;}
+  .struct-rank{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;color:var(--amber);opacity:0.5;align-self:center;}
+  .struct-card.hot .struct-rank{opacity:1;}
+  .struct-card.cold{opacity:0.55;}
+
   .empty-state{text-align:center;padding:32px 16px;color:var(--mist-dim);font-size:14px;line-height:1.7;}
   .empty-state .big{font-size:32px;display:block;margin-bottom:8px;}
 
@@ -302,6 +315,12 @@
     <div id="conditionSpotsPanel" style="display:none;">
       <div class="rec-top" id="conditionSpotsHeader">Best Spots Right Now</div>
       <div id="conditionSpotsList"></div>
+    </div>
+
+    <!-- Structure / Topo Guide -->
+    <div id="structurePanel" style="display:none;">
+      <div class="rec-top">Where to Fish the Shore</div>
+      <div id="structureList"></div>
     </div>
 
     <div class="panel" id="factorsPanel" style="display:none;">
@@ -986,6 +1005,250 @@ const ICONS={
 };
 function barColor(s){ return s>=70?'#E0A53D':s>=45?'#C98A45':'#A2503C'; }
 
+// ============================================================
+//  SHORE STRUCTURE / TOPO GUIDE
+// ============================================================
+const STRUCTURES = [
+  {
+    id:'point', name:'Points & Fingers', icon:'🫰',
+    desc:'Land extending into the water — fish move along these as they transition between deep and shallow.',
+    score(c){ // c = {waterTemp, windMph, pressureSlope, now, sunrise, sunset, species}
+      let s = 55;
+      if(c.species==='bass'){
+        s += c.waterTemp>=58&&c.waterTemp<=78 ? 20 : -10;
+        s += c.pressureSlope<=-0.15 ? 15 : c.pressureSlope>=0.15 ? -5 : 5;
+        s += isActiveWindow(c) ? 10 : 0;
+      } else if(c.species==='walleye'){
+        s += !isActiveWindow(c) ? 20 : 0; // walleye prefer low-light/dark at structure
+        s += c.pressureSlope<=-0.15 ? 10 : 0;
+      } else if(c.species==='trout'||c.species==='salmon'){
+        s += c.waterTemp<=60 ? 15 : c.waterTemp>=68 ? -15 : 5;
+      }
+      s += c.windMph>=8&&c.windMph<=20 ? 10 : 0; // wind piles baitfish on points
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){ return c.waterTemp>=65?'8–18 ft off tip':c.waterTemp>=55?'5–12 ft':'2–8 ft'; },
+    technique(c){
+      if(c.species==='bass') return c.waterTemp>=65?'Swim jig or drop-shot along the deep edge':'Crankbait parallel to the point';
+      if(c.species==='walleye') return 'Jig slowly along the slope at dusk/dawn';
+      return 'Spoon or streamer on the deeper side';
+    },
+  },
+  {
+    id:'dropoff', name:'Drop-offs & Ledges', icon:'📐',
+    desc:'Sudden depth changes where fish stage between feeding and resting zones.',
+    score(c){
+      let s = 50;
+      if(c.species==='bass'){
+        s += c.waterTemp>=70 ? 20 : c.waterTemp>=58 ? 10 : -5;
+        s += c.pressureSlope>=0.15 ? 15 : c.pressureSlope<=-0.15 ? -5 : 5; // post-front bass go deep
+      } else if(c.species==='walleye'){
+        s += 20; // walleye love ledges all season
+        s += c.pressureSlope>=0.15 ? 10 : 0; // post-front, go deeper
+      } else if(c.species==='trout'||c.species==='salmon'){
+        s += c.waterTemp>=65 ? 25 : 10; // seek thermocline in warm water
+      }
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){
+      if(c.species==='bass') return c.waterTemp>=70?'12–25 ft':'8–18 ft';
+      if(c.species==='walleye') return '10–25 ft ledge face';
+      return c.waterTemp>=65?'20–45 ft':'10–25 ft';
+    },
+    technique(c){
+      if(c.species==='bass') return 'Carolina rig or football jig dragged along the break';
+      if(c.species==='walleye') return 'Live-bait rig or blade bait on the bottom';
+      return 'Troll a spoon just above the thermocline';
+    },
+  },
+  {
+    id:'weed_edge', name:'Weed Edges & Grass Lines', icon:'🌿',
+    desc:'Inside edge, outside edge, and pockets of submerged vegetation — prime ambush cover.',
+    score(c){
+      let s = 60;
+      if(c.species==='bass'){
+        s += c.waterTemp>=62&&c.waterTemp<=82 ? 20 : -10;
+        s += isActiveWindow(c) ? 10 : -5;
+        s += c.pressureSlope<=-0.15 ? 15 : 5;
+      } else if(c.species==='walleye'){
+        s += c.waterTemp<=65 ? 15 : 0; // walleye use weeds in spring
+        s += !isActiveWindow(c) ? 10 : 0;
+      } else {
+        s -= 15; // trout/salmon less relevant to weeds
+      }
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){ return c.waterTemp>=70?'outside edge 8–14 ft':'inside edge 3–8 ft'; },
+    technique(c){
+      if(c.species==='bass') return 'Punch/flip into pockets; frog or buzzbait over matted grass';
+      if(c.species==='walleye') return 'Weedless jig or spinner along the outer edge at dusk';
+      return 'Nymph or small streamer through the openings';
+    },
+  },
+  {
+    id:'cove', name:'Coves & Bays', icon:'🌊',
+    desc:'Protected shallow water — warmer than the main lake, holds spawning fish and early-season feeders.',
+    score(c){
+      let s = 45;
+      const month = c.now.getMonth()+1;
+      if(c.species==='bass'){
+        s += (month>=3&&month<=5) ? 25 : (month>=9&&month<=10) ? 15 : -5; // spring/fall
+        s += c.waterTemp>=58&&c.waterTemp<=72 ? 15 : 0;
+        s += isActiveWindow(c) ? 10 : 0;
+      } else if(c.species==='walleye'){
+        s += (month>=3&&month<=5) ? 20 : -10;
+      } else if(c.species==='trout'||c.species==='salmon'){
+        s += c.waterTemp<=55 ? 10 : c.waterTemp>=68 ? -20 : 0;
+      }
+      s += c.windMph<=8 ? 10 : -5; // calm coves best
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){ return c.waterTemp>=65?'5–12 ft near mouth':'2–6 ft shallow flats'; },
+    technique(c){
+      if(c.species==='bass') return 'Topwater at dawn, ned rig or shaky head midday';
+      if(c.species==='walleye') return 'Jig or lindy rig near the cove mouth at night';
+      return 'Dry fly or small spinner in the shallows';
+    },
+  },
+  {
+    id:'rocky_bank', name:'Rocky Banks & Riprap', icon:'🪨',
+    desc:'Hard bottom and rock piles hold crayfish and baitfish — high-percentage feeding zones.',
+    score(c){
+      let s = 55;
+      if(c.species==='bass'){
+        s += 15; // bass love rock all year
+        s += c.pressureSlope<=-0.15 ? 15 : 5;
+        s += isActiveWindow(c) ? 10 : 0;
+      } else if(c.species==='walleye'){
+        s += 20; // walleye spawn on rock, feed on it
+      } else if(c.species==='trout'||c.species==='salmon'){
+        s += 10;
+        s += c.waterTemp<=60 ? 15 : 0;
+      }
+      s += c.windMph>=10 ? 10 : 0; // wind-swept rocks attract bait
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){ return '2–10 ft along the face'; },
+    technique(c){
+      if(c.species==='bass') return 'Craw-pattern crankbait or tube jig bounced off rock';
+      if(c.species==='walleye') return 'Jig tipped with minnow dragged along the face';
+      return 'Spoon or streamer worked with current';
+    },
+  },
+  {
+    id:'inflow', name:'Creek Mouths & Inflows', icon:'💧',
+    desc:'Moving water brings oxygen and baitfish — a magnet during warm weather and pre-fronts.',
+    score(c){
+      let s = 50;
+      if(c.waterTemp>=68) s += 20; // warm water = less O2, inflows critical
+      if(c.pressureSlope<=-0.15) s += 15;
+      if(c.species==='trout'||c.species==='salmon') s += 25;
+      if(c.species==='walleye') s += 10;
+      const month = c.now.getMonth()+1;
+      if(month>=3&&month<=5) s += 10; // spring runoff
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){ return '2–8 ft at the fan'; },
+    technique(c){
+      if(c.species==='trout'||c.species==='salmon') return 'Drift spawn sacs or stream nymphs in the current seam';
+      if(c.species==='bass') return 'Swimbait or crankbait in the plume';
+      return 'Live bait suspended below a float in the current';
+    },
+  },
+  {
+    id:'flat', name:'Shallow Flats', icon:'〰️',
+    desc:'Open, expansive shallow areas — prime feeding grounds at the right times but empty otherwise.',
+    score(c){
+      let s = 35;
+      if(isActiveWindow(c)) s += 25; // flats only fire during active windows
+      if(c.species==='bass'&&c.waterTemp>=60&&c.waterTemp<=75) s += 15;
+      if(c.pressureSlope<=-0.15) s += 10;
+      if(c.windMph>=12) s -= 15; // too rough on flats
+      if(c.pressureSlope>=0.3) s -= 15; // post-front fish leave flats
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){ return '2–5 ft'; },
+    technique(c){
+      if(c.species==='bass') return 'Walking topwater at dawn; ned rig sight-fishing by day';
+      if(c.species==='walleye') return 'Jig at dusk — walleye push to flats to feed after dark';
+      return 'Dry fly or small streamer on the surface';
+    },
+  },
+  {
+    id:'laydown', name:'Laydowns & Timber', icon:'🪵',
+    desc:'Fallen trees and submerged wood — year-round structure and shade that concentrates fish.',
+    score(c){
+      let s = 55;
+      if(c.species==='bass'){
+        s += 15;
+        s += c.waterTemp>=60 ? 10 : 0;
+        s += isActiveWindow(c) ? 10 : 0;
+      } else if(c.species==='walleye'){ s -= 10; }
+      else { s -= 5; }
+      s += c.pressureSlope>=-0.05&&c.pressureSlope<=0.05 ? 10 : 0; // stable pressure
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){ return c.waterTemp>=70?'shaded, 4–10 ft':'2–6 ft'; },
+    technique(c){
+      if(c.species==='bass') return 'Flip a beaver or craw right into the branches; slow roll swimbait along the trunk';
+      return 'Present bait tight to the structure';
+    },
+  },
+  {
+    id:'dock', name:'Docks & Piers', icon:'🚢',
+    desc:'Shaded, structured, with deep-water access — seasonal holding spots that are easy to read.',
+    score(c){
+      let s = 50;
+      if(c.species==='bass'){
+        s += c.waterTemp>=65 ? 20 : 0; // summer bass love docks
+        s += !isActiveWindow(c) ? 10 : 0; // midday dock skipping
+      } else { s -= 10; }
+      s += c.pressureSlope>=0.15 ? 10 : 0; // post-front, fish push to shade
+      return Math.max(0,Math.min(100,s));
+    },
+    depth(c){ return 'target back third of dock in 4–10 ft'; },
+    technique(c){
+      return c.species==='bass' ? 'Skip a wacky rig or shaky head under the deck; pitch a jig to the corners' : 'Drop a jig straight down alongside the pilings';
+    },
+  },
+];
+
+function isActiveWindow({now, sunrise, sunset}){
+  const mins = now.getHours()*60+now.getMinutes();
+  const srMins = sunrise.getHours()*60+sunrise.getMinutes();
+  const ssMins = sunset.getHours()*60+sunset.getMinutes();
+  return (mins >= srMins-60 && mins <= srMins+90) || (mins >= ssMins-90 && mins <= ssMins+60) || mins < 60 || mins > 1380;
+}
+
+function rankStructures(ctx){
+  return STRUCTURES
+    .map(s => ({ ...s, rating: s.score(ctx) }))
+    .sort((a,b) => b.rating-a.rating);
+}
+
+function renderStructureGuide(ctx){
+  const panel = document.getElementById('structurePanel');
+  const list  = document.getElementById('structureList');
+  if(!ctx){ panel.style.display='none'; return; }
+  const ranked = rankStructures({...ctx, species: state.species});
+  const top = ranked.slice(0,5);
+  panel.style.display='block';
+  list.innerHTML = top.map((s,i) => {
+    const cls = s.rating>=70?'hot':s.rating>=50?'warm':s.rating<35?'cold':'';
+    const badge = s.rating>=70?'🔥 Hot':s.rating>=55?'✓ Good':s.rating>=40?'Fair':'—';
+    return `<div class="struct-card ${cls}">
+      <div class="struct-icon">${s.icon}</div>
+      <div>
+        <div class="struct-name">${s.name} <span style="font-size:11px;font-weight:500;color:${s.rating>=70?'var(--amber)':s.rating>=55?'var(--moss)':'var(--mist-dim)'};">${badge}</span></div>
+        <div class="struct-why">${s.desc}</div>
+        <div class="struct-depth">⬇ ${s.depth(ctx)}</div>
+        <div class="struct-technique">🎣 ${s.technique(ctx)}</div>
+      </div>
+      <div class="struct-rank">#${i+1}</div>
+    </div>`;
+  }).join('');
+}
+
 function renderScore(){
   const {factors, weatherCtx}=buildFactors();
   const total=Math.round(factors.reduce((s,f)=>s+f.score*f.weight,0));
@@ -1029,6 +1292,7 @@ function renderScore(){
   document.getElementById('meterPanel').style.display='flex';
   document.getElementById('factorsPanel').style.display='block';
   renderConditionSpots(weatherCtx, total);
+  renderStructureGuide(weatherCtx);
 
   // Trigger buoy load if boat mode is active for a known large lake
   const lake = detectLake(document.getElementById('locInput').value);
