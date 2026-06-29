@@ -782,12 +782,19 @@ async function geocode(query){
   throw new Error(`NOTFOUND:${query}`);
 }
 async function fetchWeather(lat,lon){
-  const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+  const build = (la,lo) =>
+    `https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}`+
     `&current=temperature_2m,wind_speed_10m,wind_direction_10m,pressure_msl`+
     `&hourly=pressure_msl,temperature_2m`+
     `&daily=sunrise,sunset`+
     `&past_days=2&forecast_days=1&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`;
-  const res=await fetch(url); if(!res.ok) throw new Error('weather failed');
+  let res = await fetch(build(lat,lon));
+  // Open-Meteo occasionally errors for open-water coords; nudge 0.25° and retry once
+  if(!res.ok){
+    const lat2 = +(lat + 0.25).toFixed(4), lon2 = +(lon + 0.25).toFixed(4);
+    res = await fetch(build(lat2, lon2));
+  }
+  if(!res.ok) throw new Error('weather failed');
   return res.json();
 }
 function pressureTrend(w){
