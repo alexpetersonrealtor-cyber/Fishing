@@ -175,6 +175,54 @@
   .status{font-size:13px;color:var(--mist-dim);padding:6px 0;}
   .status.error{color:#D98C7A;}
 
+  /* boat mode */
+  .boat-toggle{
+    display:flex; align-items:center; gap:8px;
+    margin-top:12px; padding-top:12px;
+    border-top:1px solid var(--line);
+  }
+  .boat-toggle label{font-size:13px;color:var(--mist-dim);cursor:pointer;flex:1;}
+  .toggle-switch{position:relative;width:42px;height:24px;flex-shrink:0;}
+  .toggle-switch input{opacity:0;width:0;height:0;}
+  .toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--surface-2);border-radius:24px;border:1px solid var(--line);transition:background 0.2s;}
+  .toggle-slider::before{content:'';position:absolute;height:18px;width:18px;left:3px;top:2px;background:var(--mist-dim);border-radius:50%;transition:transform 0.2s;}
+  .toggle-switch input:checked + .toggle-slider{background:var(--teal);border-color:var(--teal);}
+  .toggle-switch input:checked + .toggle-slider::before{transform:translateX(18px);background:var(--deep);}
+
+  .boat-panel{background:var(--surface);border:1px solid var(--teal);border-radius:var(--radius);padding:16px;margin-bottom:14px;}
+  .boat-header{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+  .boat-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;color:var(--teal);}
+  .boat-subtitle{font-size:12px;color:var(--mist-dim);}
+
+  .waypoint-out{
+    background:var(--deep);border:1px solid var(--teal);border-radius:12px;
+    padding:16px;margin-top:14px;
+  }
+  .waypoint-coords{
+    font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;
+    color:var(--teal);letter-spacing:0.04em;margin-bottom:4px;
+  }
+  .waypoint-meta{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    color:var(--mist-dim);display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;
+  }
+  .waypoint-why{font-size:13px;color:var(--mist-dim);line-height:1.6;margin-bottom:10px;}
+  .waypoint-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .waypoint-depth-bar{margin-top:10px;}
+  .depth-label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist-dim);margin-bottom:4px;}
+  .depth-track{height:8px;background:var(--surface-2);border-radius:4px;overflow:visible;position:relative;margin-bottom:2px;}
+  .depth-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--moss),var(--teal));}
+  .depth-range-labels{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mist-dim);}
+
+  .buoy-badge{
+    display:inline-flex;align-items:center;gap:5px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;
+    background:var(--surface-2);border:1px solid var(--line);
+    border-radius:6px;padding:4px 8px;color:var(--mist-dim);
+  }
+  .buoy-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--mist-dim);flex-shrink:0;}
+  .buoy-badge .dot.live{background:#5DBB63;}
+
   /* export toolbar */
   .toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px;}
 </style>
@@ -251,6 +299,41 @@
           <button class="btn-ghost" id="applyOverrideBtn">Apply</button>
         </div>
       </details>
+
+      <!-- Boat mode toggle lives here so it appears once weather loads -->
+      <div class="boat-toggle">
+        <label for="boatModeToggle">🚤 Boat Mode — get a GPS waypoint for open water</label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="boatModeToggle" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Boat mode panel -->
+    <div class="boat-panel" id="boatPanel" style="display:none;">
+      <div class="boat-header">
+        <div>
+          <div class="boat-title">🚤 Waypoint Generator</div>
+          <div class="boat-subtitle">Enter your launch point — get a specific spot to run to</div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Launch point / marina</label>
+        <div class="field-row">
+          <input type="text" id="launchInput" placeholder="e.g. Winthrop Harbor Marina" />
+          <button class="btn-icon" id="launchGpsBtn" title="Use current location">📍</button>
+        </div>
+        <div id="launchResult" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist-dim);margin-top:4px;min-height:12px;"></div>
+      </div>
+
+      <div id="buoyTempRow" style="margin-bottom:12px;display:none;">
+        <div id="buoyBadge" class="buoy-badge"><span class="dot" id="buoyDot"></span><span id="buoyLabel">fetching buoy…</span></div>
+      </div>
+
+      <button class="btn-teal" id="waypointBtn" style="width:100%;padding:12px;" disabled>Calculate Waypoint</button>
+      <div id="waypointOut"></div>
     </div>
 
     <div class="footer-note">
@@ -1096,6 +1179,317 @@ function renderLogList(){
 function esc(str){
   if(!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+//  BOAT MODE — waypoint generator for large open water
+// ============================================================
+
+// Known large water bodies with bathymetric models + NOAA buoy IDs
+// depthAtMiles(d) → approximate depth in feet at d miles from the IL/WI shore
+const LARGE_LAKES = {
+  'lake michigan': {
+    label: 'Lake Michigan',
+    buoys: ['45007','45002','45012'],  // NDBC station IDs
+    // Simplified bathymetry for the western shore (IL/WI side)
+    // Based on NOAA NGDC survey data: steep drop then gradual deepening
+    depthAtMiles: d => Math.min(295, 8 + 38*d - 1.6*d*d + 0.03*d*d*d),
+    defaultBearing: 75,   // head ENE from IL/WI shore to reach deep water
+    maxDepth: 295,
+    notes: 'Southern basin max depth ~295 ft. Thermocline forms 40–80 ft in summer. Chinook salmon hold near the thermocline; coho and lake trout target baitfish schools near depth breaks.',
+  },
+  'lake superior': {
+    label: 'Lake Superior',
+    buoys: ['45006','45001'],
+    depthAtMiles: d => Math.min(750, 15 + 55*d - 2*d*d),
+    defaultBearing: 0,
+    maxDepth: 750,
+    notes: 'Deepest Great Lake — max 750 ft. Lake trout dominate; target 60–120 ft near structure in summer.',
+  },
+  'lake erie': {
+    label: 'Lake Erie',
+    buoys: ['45005','45008'],
+    depthAtMiles: d => Math.min(210, 5 + 22*d),
+    defaultBearing: 90,
+    maxDepth: 210,
+    notes: 'Shallowest Great Lake; eastern basin reaches 210 ft. Walleye dominate — target transition structure 20–40 ft.',
+  },
+  'lake huron': {
+    label: 'Lake Huron',
+    buoys: ['45003','45008'],
+    depthAtMiles: d => Math.min(295, 10 + 40*d - 1.2*d*d),
+    defaultBearing: 90,
+    maxDepth: 295,
+    notes: 'Diverse fishery — walleye on reefs, salmon and lake trout in deep structure.',
+  },
+  'lake ontario': {
+    label: 'Lake Ontario',
+    buoys: ['45012','45010'],
+    depthAtMiles: d => Math.min(802, 20 + 80*d - 3*d*d),
+    defaultBearing: 90,
+    maxDepth: 802,
+    notes: 'Deepest of the lower four Great Lakes. Chinook salmon and lake trout in deep open water.',
+  },
+};
+
+// Species depth preferences by water surface temp (°F)
+// Returns { minFt, maxFt, strategy, trollSpeed }
+function speciesDepthTarget(species, surfaceTempF) {
+  const t = surfaceTempF;
+  switch(species) {
+    case 'salmon':
+      if(t < 48) return { minFt:20,  maxFt:50,  strategy:'Cold water — salmon near surface. Troll at 2–2.5 mph with spoons or stick baits.', trollSpeed:'2–2.5 mph' };
+      if(t < 58) return { minFt:30,  maxFt:70,  strategy:'Spring temp break — target the 30–70 ft zone. Salmon follow baitfish just below the warm layer.', trollSpeed:'2–2.5 mph' };
+      if(t < 65) return { minFt:50,  maxFt:100, strategy:'Thermocline forming — fish 50–100 ft where temp drops sharply. Spoons and paddle-flasher rigs.', trollSpeed:'2.5–3 mph' };
+      if(t < 72) return { minFt:80,  maxFt:140, strategy:'Surface too warm — fish 80–140 ft at the thermocline. Use downriggers or Dipsy Divers.', trollSpeed:'2.5–3 mph' };
+      return                { minFt:120, maxFt:200, strategy:'Hot surface — thermocline is deep. Target 120–200 ft with full-core line or heavy downriggers.', trollSpeed:'2.5–3.5 mph' };
+    case 'trout':
+      if(t < 50) return { minFt:15,  maxFt:40,  strategy:'Lake trout near surface in cold water. Jig over hard structure or troll shallow.', trollSpeed:'1.5–2 mph' };
+      if(t < 62) return { minFt:40,  maxFt:80,  strategy:'Prime lake trout temp — fish 40–80 ft over rocky structure and hard bottom transitions.', trollSpeed:'2–2.5 mph' };
+      if(t < 70) return { minFt:70,  maxFt:130, strategy:'Trout pushed deeper by surface warmth — target 70–130 ft with flasher-fly rigs.', trollSpeed:'2–2.5 mph' };
+      return                { minFt:110, maxFt:180, strategy:'Hot conditions — lake trout hugging the thermocline bottom at 110–180 ft.', trollSpeed:'2–2.5 mph' };
+    case 'walleye':
+      if(t < 50) return { minFt:15, maxFt:35, strategy:'Cold walleye — slow retrieve near bottom over sand/rock transition.', trollSpeed:'1–1.5 mph' };
+      if(t < 65) return { minFt:12, maxFt:30, strategy:'Prime walleye range — troll crawler harnesses or stick baits over transition structure at dawn/dusk.', trollSpeed:'1.2–1.8 mph' };
+      return               { minFt:20, maxFt:45, strategy:'Warm surface — walleye slide deeper. Target 20–45 ft over hard structure on low-light windows.', trollSpeed:'1.2–1.8 mph' };
+    case 'bass':
+    default:
+      if(t < 55) return { minFt:8,  maxFt:20, strategy:'Cool bass — work 8–20 ft over drop-offs and rock structure with slower presentations.', trollSpeed:'casting' };
+      if(t < 75) return { minFt:5,  maxFt:18, strategy:'Prime bass temp — target 5–18 ft near weed edges, rocky points, and wave-washed shoreline.', trollSpeed:'casting' };
+      return               { minFt:15, maxFt:35, strategy:'Hot surface — bass pushed to 15–35 ft in open water or shaded/deep structure.', trollSpeed:'casting' };
+  }
+}
+
+// Calculate destination GPS from start + bearing + distance
+function destPoint(lat, lon, bearingDeg, distMiles) {
+  const R = 3958.8;
+  const d = distMiles / R;
+  const b = bearingDeg * Math.PI / 180;
+  const lat1 = lat * Math.PI / 180;
+  const lon1 = lon * Math.PI / 180;
+  const lat2 = Math.asin(Math.sin(lat1)*Math.cos(d) + Math.cos(lat1)*Math.sin(d)*Math.cos(b));
+  const lon2 = lon1 + Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(lat1), Math.cos(d)-Math.sin(lat1)*Math.sin(lat2));
+  return { lat: lat2*180/Math.PI, lon: lon2*180/Math.PI };
+}
+
+// Invert depth model: find distance that achieves target depth
+function distanceForDepth(targetFt, depthAtMiles, maxSearch=40) {
+  let lo=0.1, hi=maxSearch;
+  for(let i=0;i<40;i++){
+    const mid=(lo+hi)/2;
+    depthAtMiles(mid) < targetFt ? lo=mid : hi=mid;
+  }
+  return (lo+hi)/2;
+}
+
+// Wind-adjusted trolling bearing: troll across the wind, not into/away from it
+function trollingBearing(defaultBearing, windDirFrom) {
+  // Wind comes FROM windDirFrom degrees. We want to troll across it (±90°).
+  // Pick the perpendicular that aligns closest to the default deep-water bearing.
+  const perp1 = (windDirFrom + 90) % 360;
+  const perp2 = (windDirFrom - 90 + 360) % 360;
+  const diff1 = Math.abs(((perp1 - defaultBearing + 540) % 360) - 180);
+  const diff2 = Math.abs(((perp2 - defaultBearing + 540) % 360) - 180);
+  return diff1 < diff2 ? perp1 : perp2;
+}
+
+// Compass bearing to cardinal name
+function bearingName(deg) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(((deg%360)+360)%360 / 22.5) % 16];
+}
+
+// Detect if searched location matches a known large lake
+function detectLake(searchQuery) {
+  const q = (searchQuery||'').toLowerCase();
+  for(const [key, lake] of Object.entries(LARGE_LAKES)) {
+    if(q.includes(key) || q.includes(key.replace('lake ',''))) return { key, ...lake };
+  }
+  return null;
+}
+
+// NOAA NDBC buoy water temp fetch
+async function fetchBuoyTemp(stationIds) {
+  for(const id of stationIds) {
+    try {
+      const url = `https://www.ndbc.noaa.gov/data/realtime2/${id}.txt`;
+      const res = await fetch(url);
+      if(!res.ok) continue;
+      const text = await res.text();
+      const lines = text.trim().split('\n');
+      // Row 0 & 1 are headers; row 2 is most recent data
+      if(lines.length < 3) continue;
+      const cols = lines[2].trim().split(/\s+/);
+      // WTMP is column index 14 (0-based); value in Celsius; MM = missing
+      const wtmpC = cols[14];
+      if(!wtmpC || wtmpC === 'MM') continue;
+      const tempF = parseFloat(wtmpC) * 9/5 + 32;
+      if(isNaN(tempF)) continue;
+      return { tempF: Math.round(tempF*10)/10, stationId: id, live: true };
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+// State for boat mode
+let boatState = {
+  launchLat: null, launchLon: null, launchLabel: '',
+  buoyTemp: null, lake: null,
+};
+
+// Toggle boat mode panel
+document.getElementById('boatModeToggle').addEventListener('change', e => {
+  document.getElementById('boatPanel').style.display = e.target.checked ? 'block' : 'none';
+  if(e.target.checked && boatState.launchLat) computeWaypoint();
+});
+
+// Launch point GPS
+document.getElementById('launchGpsBtn').addEventListener('click', () => {
+  const btn = document.getElementById('launchGpsBtn');
+  btn.textContent = '⏳'; btn.disabled = true;
+  getGPS(async (lat, lon) => {
+    boatState.launchLat = lat; boatState.launchLon = lon;
+    btn.textContent = '✓'; btn.disabled = false;
+    setTimeout(()=>{ btn.textContent='📍'; },2000);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=14`, {headers:{'User-Agent':'ContourFishingApp/1.0'}});
+      const d = await res.json();
+      const a = d.address||{};
+      boatState.launchLabel = [a.marina||a.harbour||a.amenity||a.city||a.town||a.village, a.state].filter(Boolean).join(', ') || `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    } catch(e) { boatState.launchLabel = `${lat.toFixed(4)},${lon.toFixed(4)}`; }
+    document.getElementById('launchResult').textContent = `📍 ${boatState.launchLabel}`;
+    document.getElementById('waypointBtn').disabled = false;
+    if(state.weather) await loadBuoyForCurrentLake();
+  }, msg => { alert(msg); btn.textContent='📍'; btn.disabled=false; });
+});
+
+// Launch point text entry
+document.getElementById('launchInput').addEventListener('change', async () => {
+  const q = document.getElementById('launchInput').value.trim();
+  if(!q) return;
+  try {
+    const loc = await geocode(q);
+    boatState.launchLat = loc.lat; boatState.launchLon = loc.lon; boatState.launchLabel = loc.label;
+    document.getElementById('launchResult').textContent = `📍 ${loc.label}`;
+    document.getElementById('waypointBtn').disabled = false;
+    if(state.weather) await loadBuoyForCurrentLake();
+  } catch(e) { document.getElementById('launchResult').textContent = 'Could not find that location.'; }
+});
+
+document.getElementById('waypointBtn').addEventListener('click', computeWaypoint);
+
+async function loadBuoyForCurrentLake() {
+  const lake = detectLake(document.getElementById('locInput').value);
+  boatState.lake = lake;
+  if(!lake) return;
+  document.getElementById('buoyTempRow').style.display = 'block';
+  document.getElementById('buoyLabel').textContent = `Fetching ${lake.label} buoy…`;
+  document.getElementById('buoyDot').className = 'dot';
+  const result = await fetchBuoyTemp(lake.buoys);
+  if(result) {
+    boatState.buoyTemp = result.tempF;
+    document.getElementById('buoyDot').className = 'dot live';
+    document.getElementById('buoyLabel').textContent = `NOAA Buoy ${result.stationId}: ${result.tempF}°F water temp (live)`;
+    // Also update the override field
+    document.getElementById('waterTempInput').value = result.tempF;
+    state.manualWaterTemp = result.tempF;
+    if(state.weather) renderScore();
+  } else {
+    document.getElementById('buoyLabel').textContent = 'Buoy offline — using estimated temp';
+  }
+}
+
+function computeWaypoint() {
+  if(!boatState.launchLat || !state.weather) return;
+
+  const lake = boatState.lake || detectLake(document.getElementById('locInput').value);
+  const w = state.weather;
+  const windDirFrom = w.current.wind_direction_10m;
+  const waterTemp = boatState.buoyTemp || state.manualWaterTemp || (()=>{
+    const temps = w.hourly.temperature_2m.filter(t=>typeof t==='number');
+    return temps.reduce((a,b)=>a+b,0)/temps.length - 4;
+  })();
+  const sp = state.species;
+
+  const depth = speciesDepthTarget(sp, waterTemp);
+
+  let dist, bearing, wpLat, wpLon, lakeNotes, depthModel;
+
+  if(lake) {
+    depthModel = lake.depthAtMiles;
+    // Adjust target depth: use midpoint of range
+    const targetFt = (depth.minFt + depth.maxFt) / 2;
+    dist = distanceForDepth(targetFt, depthModel);
+    dist = Math.round(dist * 10) / 10;
+
+    // Bearing: run toward deep water, adjusted for wind to troll across it
+    const deepBearing = lake.defaultBearing;
+    bearing = depth.trollSpeed === 'casting'
+      ? deepBearing
+      : trollingBearing(deepBearing, windDirFrom);
+    bearing = Math.round(bearing);
+    lakeNotes = lake.notes;
+  } else {
+    // Generic open-water estimate: no bathymetry known
+    dist = Math.round((depth.minFt / 25) * 10) / 10; // very rough
+    bearing = Math.round(trollingBearing(90, windDirFrom));
+    lakeNotes = 'No bathymetric data for this body of water — distance is a rough estimate only.';
+    depthModel = null;
+  }
+
+  const wp = destPoint(boatState.launchLat, boatState.launchLon, bearing, dist);
+  const latStr = wp.lat.toFixed(5);
+  const lonStr = wp.lon.toFixed(5);
+  const mapsUrl = `https://maps.google.com/?q=${wp.lat},${wp.lon}`;
+  const navUrl  = `https://maps.google.com/?saddr=${boatState.launchLat},${boatState.launchLon}&daddr=${wp.lat},${wp.lon}&travelmode=boat`;
+
+  // Depth at waypoint
+  const wpDepth = depthModel ? Math.round(depthModel(dist)) : '?';
+
+  const windNote = w.current.wind_speed_10m > 2
+    ? `Wind from ${bearingName(windDirFrom)} at ${w.current.wind_speed_10m.toFixed(0)} mph — trolling ${bearingName(bearing)} to work across it.`
+    : `Calm wind — running ${bearingName(bearing)} toward target depth.`;
+
+  document.getElementById('waypointOut').innerHTML = `
+    <div class="waypoint-out">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--mist-dim);margin-bottom:6px;">Target Waypoint</div>
+      <div class="waypoint-coords">${latStr}, ${lonStr}</div>
+      <div class="waypoint-meta">
+        <span>📍 ${esc(boatState.launchLabel||'launch')}</span>
+        <span>→ ${bearingName(bearing)} (${bearing}°)</span>
+        <span>⇢ ${dist} mi</span>
+        <span>↕ ~${wpDepth} ft depth</span>
+      </div>
+      <div class="waypoint-depth-bar">
+        <div class="depth-label">Target trolling depth: ${depth.minFt}–${depth.maxFt} ft</div>
+        <div class="depth-track" style="background:var(--surface-2);">
+          <div class="depth-fill" style="margin-left:${(depth.minFt/300)*100}%;width:${((depth.maxFt-depth.minFt)/300)*100}%;"></div>
+        </div>
+        <div class="depth-range-labels"><span>0 ft</span><span>150 ft</span><span>300 ft</span></div>
+      </div>
+      <div class="waypoint-why" style="margin-top:10px;">
+        <strong>Strategy:</strong> ${depth.strategy}
+        ${depth.trollSpeed !== 'casting' ? `<br><strong>Troll speed:</strong> ${depth.trollSpeed}` : ''}
+        <br><strong>Wind:</strong> ${windNote}
+        ${lakeNotes ? `<br><br><em>${lakeNotes}</em>` : ''}
+      </div>
+      <div class="waypoint-actions">
+        <a href="${mapsUrl}" target="_blank" rel="noopener" class="btn-teal" style="padding:8px 14px;font-size:13px;text-decoration:none;font-family:'Space Grotesk',sans-serif;font-weight:700;border-radius:10px;display:inline-block;">🗺 Open in Maps</a>
+        <button class="btn-ghost" onclick="navigator.clipboard&&navigator.clipboard.writeText('${latStr}, ${lonStr}').then(()=>{this.textContent='✓ Copied';setTimeout(()=>{this.textContent='Copy Coords'},1500)})">Copy Coords</button>
+      </div>
+    </div>`;
+}
+
+// Trigger buoy load whenever a search completes for a known lake
+const _origRunSearch = runSearch;
+// (hook into renderScore to detect large lakes after load)
+const _origRenderScore = renderScore;
+function renderScore(){
+  _origRenderScore();
+  const lake = detectLake(document.getElementById('locInput').value);
+  if(lake && document.getElementById('boatModeToggle').checked) {
+    loadBuoyForCurrentLake();
+  }
 }
 
 // ============================================================
