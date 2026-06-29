@@ -215,6 +215,16 @@
   .struct-diagram{width:100%;border-radius:8px;overflow:hidden;}
   .struct-tip.leaflet-tooltip{background:#122C2E!important;border:1px solid #E0A53D!important;color:#ECE7DB!important;font-family:monospace!important;font-size:11px!important;border-radius:6px!important;white-space:nowrap;}
 
+  /* Lake conditions card */
+  .lake-cond-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 8px;}
+  .lc-card{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+  .lc-card.lc-hot{border-color:var(--amber);background:rgba(224,165,61,0.08);}
+  .lc-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mist-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px;}
+  .lc-value{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:var(--mist);line-height:1.1;}
+  .lc-sub{font-size:11px;color:var(--mist-dim);margin-top:3px;line-height:1.4;}
+  .lc-buoy-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+  .lc-buoy-chip{font-family:'IBM Plex Mono',monospace;font-size:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--teal);}
+
   .empty-state{text-align:center;padding:32px 16px;color:var(--mist-dim);font-size:14px;line-height:1.7;}
   .empty-state .big{font-size:32px;display:block;margin-bottom:8px;}
 
@@ -410,6 +420,9 @@
       <div id="buoyTempRow" style="margin-bottom:12px;display:none;">
         <div id="buoyBadge" class="buoy-badge"><span class="dot" id="buoyDot"></span><span id="buoyLabel">fetching buoy…</span></div>
       </div>
+
+      <!-- Live lake conditions card -->
+      <div id="lakeConditionsPanel" style="display:none;margin-bottom:14px;"></div>
 
       <button class="btn-teal" id="waypointBtn" style="width:100%;padding:12px;" disabled>Calculate Waypoint</button>
       <div id="waypointOut"></div>
@@ -2227,7 +2240,8 @@ function esc(str){
 const LARGE_LAKES = {
   'lake michigan': {
     label: 'Lake Michigan',
-    buoys: ['45007','45002','45012'],  // NDBC station IDs
+    // NDBC + GLERL buoys: offshore, midlake, nearshore IL/WI/MI sides
+    buoys: ['45007','45002','45012','45026','45029','CHII2','MKGM4','LDTM4','WHRI2','45023'],
     // Simplified bathymetry for the western shore (IL/WI side)
     // Based on NOAA NGDC survey data: steep drop then gradual deepening
     depthAtMiles: d => Math.min(295, 8 + 38*d - 1.6*d*d + 0.03*d*d*d),
@@ -2346,26 +2360,84 @@ function detectLake(searchQuery) {
 }
 
 // NOAA NDBC buoy water temp fetch
-async function fetchBuoyTemp(stationIds) {
-  for(const id of stationIds) {
-    try {
-      const url = `https://www.ndbc.noaa.gov/data/realtime2/${id}.txt`;
-      const res = await fetch(url);
-      if(!res.ok) continue;
-      const text = await res.text();
-      const lines = text.trim().split('\n');
-      // Row 0 & 1 are headers; row 2 is most recent data
-      if(lines.length < 3) continue;
-      const cols = lines[2].trim().split(/\s+/);
-      // WTMP is column index 14 (0-based); value in Celsius; MM = missing
-      const wtmpC = cols[14];
-      if(!wtmpC || wtmpC === 'MM') continue;
-      const tempF = parseFloat(wtmpC) * 9/5 + 32;
-      if(isNaN(tempF)) continue;
-      return { tempF: Math.round(tempF*10)/10, stationId: id, live: true };
-    } catch(e) { continue; }
-  }
-  return null;
+// Parse a single NDBC realtime2 text row into a buoy observation object
+function parseNDBCRow(id, headerRow, dataRow){
+  const headers = headerRow.trim().replace(/^#\s*/,'').split(/\s+/);
+  const vals    = dataRow.trim().split(/\s+/);
+  const get = key => { const i=headers.indexOf(key); return i>=0&&vals[i]!=='MM'?parseFloat(vals[i]):null; };
+  const wtmpC  = get('WTMP');
+  const atmpC  = get('ATMP');
+  const wspd   = get('WSPD');   // m/s
+  const wdir   = get('WDIR');   // deg
+  const wvht   = get('WVHT');   // meters
+  const mwd    = get('MWD');    // dominant wave direction deg
+  const pres   = get('PRES') || get('BAR');
+  return {
+    stationId: id,
+    tempF:   wtmpC  != null ? Math.round((wtmpC*9/5+32)*10)/10 : null,
+    atmpF:   atmpC  != null ? Math.round((atmpC*9/5+32)*10)/10 : null,
+    windMph: wspd   != null ? Math.round(wspd*2.237*10)/10 : null,
+    windDir: wdir,
+    waveHtFt:wvht   != null ? Math.round(wvht*3.281*10)/10 : null,
+    waveDir: mwd,
+    pressure:pres,
+    live: true,
+  };
+}
+
+async function fetchOneBuoy(id){
+  try{
+    const url = `https://www.ndbc.noaa.gov/data/realtime2/${id}.txt`;
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    const text = await res.text();
+    const lines = text.trim().split('\n').filter(l=>l.trim());
+    // Lines 0-1 are headers (#YY MM... and #yr mo...)
+    const hdrLine  = lines.find(l=>l.startsWith('#') && l.includes('WTMP'));
+    const dataLine = lines.find(l=>!l.startsWith('#'));
+    if(!hdrLine||!dataLine) return null;
+    const obs = parseNDBCRow(id, hdrLine, dataLine);
+    return obs.tempF != null ? obs : null;
+  } catch(e){ return null; }
+}
+
+// Fetch all buoys in parallel; return array of successful results
+async function fetchAllBuoys(stationIds){
+  const results = await Promise.all(stationIds.map(fetchOneBuoy));
+  return results.filter(Boolean);
+}
+
+// Keep legacy single-result signature for existing code
+async function fetchBuoyTemp(stationIds){
+  const all = await fetchAllBuoys(stationIds);
+  return all.length ? all[0] : null;
+}
+
+// ── Temperature break detection ──────────────────────────────────────────────
+// Given an array of buoy observations, find the largest temp gradient
+function detectTempBreaks(buoyObs){
+  if(buoyObs.length < 2) return null;
+  const valid = buoyObs.filter(b=>b.tempF!=null).sort((a,b)=>a.tempF-b.tempF);
+  if(valid.length < 2) return null;
+  const coldest = valid[0], warmest = valid[valid.length-1];
+  const gradient = warmest.tempF - coldest.tempF;
+  return {
+    gradient: Math.round(gradient*10)/10,
+    coldStation: coldest.stationId,
+    warmStation: warmest.stationId,
+    coldTempF: coldest.tempF,
+    warmTempF: warmest.tempF,
+    significant: gradient >= 3, // ≥3°F difference is a fishable break
+  };
+}
+
+// ── Wind-driven current estimate (Ekman transport) ──────────────────────────
+function estimateCurrent(windMph, windDirDeg){
+  if(windMph == null || windDirDeg == null) return null;
+  // Surface current ≈ 3% of wind speed, deflected 20° right (Northern Hemisphere)
+  const currentMph = Math.round(windMph * 0.03 * 10) / 10;
+  const currentDir = (windDirDeg + 20) % 360; // wind pushes water in wind direction + 20°
+  return { mph: currentMph, dirDeg: currentDir, dirCompass: compass(currentDir) };
 }
 
 // State for boat mode
@@ -2420,20 +2492,79 @@ async function loadBuoyForCurrentLake() {
   boatState.lake = lake;
   if(!lake) return;
   document.getElementById('buoyTempRow').style.display = 'block';
-  document.getElementById('buoyLabel').textContent = `Fetching ${lake.label} buoy…`;
+  document.getElementById('buoyLabel').textContent = `Fetching ${lake.label} buoy network…`;
   document.getElementById('buoyDot').className = 'dot';
-  const result = await fetchBuoyTemp(lake.buoys);
-  if(result) {
-    boatState.buoyTemp = result.tempF;
+
+  const allObs = await fetchAllBuoys(lake.buoys);
+  boatState.buoyObs = allObs;
+
+  if(allObs.length){
+    const primary = allObs[0];
+    boatState.buoyTemp = primary.tempF;
     document.getElementById('buoyDot').className = 'dot live';
-    document.getElementById('buoyLabel').textContent = `NOAA Buoy ${result.stationId}: ${result.tempF}°F water temp (live)`;
-    // Also update the override field
-    document.getElementById('waterTempInput').value = result.tempF;
-    state.manualWaterTemp = result.tempF;
+    document.getElementById('buoyLabel').textContent =
+      `${allObs.length} buoy${allObs.length>1?'s':''} live — Buoy ${primary.stationId}: ${primary.tempF}°F`;
+    document.getElementById('waterTempInput').value = primary.tempF;
+    state.manualWaterTemp = primary.tempF;
     if(state.weather) renderScore();
   } else {
-    document.getElementById('buoyLabel').textContent = 'Buoy offline — using estimated temp';
+    document.getElementById('buoyLabel').textContent = 'Buoys offline — using estimated temp';
   }
+
+  renderLakeConditions();
+}
+
+function renderLakeConditions(){
+  const lake = boatState.lake;
+  const obs  = boatState.buoyObs || [];
+  const panel = document.getElementById('lakeConditionsPanel');
+  if(!panel) return;
+  if(!lake || !obs.length){ panel.style.display='none'; return; }
+
+  const primary  = obs[0];
+  const tempBreak = detectTempBreaks(obs);
+  const w = state.weather;
+  const windMph = w?.current?.wind_speed_10m ?? primary.windMph;
+  const windDir = w?.current?.wind_direction_10m ?? primary.windDir;
+  const current = estimateCurrent(windMph ?? primary.windMph, windDir ?? primary.windDir);
+
+  // Wave summary from buoy
+  const withWaves = obs.find(b=>b.waveHtFt!=null);
+
+  // Troll direction: into the current gives better bait action and more coverage
+  const trollDir = current ? `${compass((current.dirDeg+180)%360)} (into current)` : '—';
+
+  panel.style.display = 'block';
+  panel.innerHTML = `<div class="rec-top">🌊 Lake Conditions — Live</div>
+  <div class="lake-cond-grid">
+    <div class="lc-card">
+      <div class="lc-label">Water Temp</div>
+      <div class="lc-value">${primary.tempF}°F</div>
+      <div class="lc-sub">Buoy ${primary.stationId}${obs.length>1?' + '+(obs.length-1)+' more':''}</div>
+    </div>
+    ${tempBreak ? `<div class="lc-card${tempBreak.significant?' lc-hot':''}">
+      <div class="lc-label">Temp Break</div>
+      <div class="lc-value">${tempBreak.gradient}°F</div>
+      <div class="lc-sub">${tempBreak.coldTempF}°→${tempBreak.warmTempF}°F across network${tempBreak.significant?' — fish the break!':''}</div>
+    </div>` : ''}
+    ${current ? `<div class="lc-card">
+      <div class="lc-label">Est. Current</div>
+      <div class="lc-value">${current.mph} mph</div>
+      <div class="lc-sub">Heading ${current.dirCompass} (wind-driven)</div>
+    </div>` : ''}
+    ${withWaves ? `<div class="lc-card">
+      <div class="lc-label">Wave Height</div>
+      <div class="lc-value">${withWaves.waveHtFt} ft</div>
+      <div class="lc-sub">From ${withWaves.waveDir!=null?compass(withWaves.waveDir):'—'} — Buoy ${withWaves.stationId}</div>
+    </div>` : ''}
+    <div class="lc-card">
+      <div class="lc-label">Troll Direction</div>
+      <div class="lc-value" style="font-size:16px;">${trollDir}</div>
+      <div class="lc-sub">Against current for best lure action</div>
+    </div>
+  </div>
+  ${obs.length>1?`<div class="lc-buoy-list">${obs.map(b=>`<span class="lc-buoy-chip">${b.stationId} ${b.tempF}°F</span>`).join('')}</div>`:''}
+  <div style="font-size:11px;color:var(--mist-dim);margin-top:8px;">Current est. = wind-driven Ekman transport (3% of wind, 20° right). Temp break = gradient across NOAA NDBC/GLERL buoy network.</div>`;
 }
 
 function computeWaypoint() {
