@@ -316,7 +316,12 @@
 
   /* Bite alerts */
   .bite-alerts-section{margin-bottom:16px;}
-  .bite-alerts-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .bite-alerts-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .bite-alerts-settings{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center;}
+  .bas-group{display:flex;align-items:center;gap:4px;}
+  .bas-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mist-dim);letter-spacing:0.04em;margin-right:2px;}
+  .bas-chip,.bas-sort{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--mist-dim);cursor:pointer;letter-spacing:0.03em;}
+  .bas-chip.active,.bas-sort.active{background:var(--moss-dim);color:var(--mist);border-color:var(--moss);}
   .bite-alerts-title{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--amber);}
   .bite-alert-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:border-color 0.15s;}
   .bite-alert-card:hover{border-color:var(--amber);}
@@ -525,6 +530,19 @@
       <div class="bite-alerts-header">
         <div class="bite-alerts-title">🔔 Upcoming Bite Windows</div>
         <button class="notif-btn" id="notifPermBtn" style="display:none;">Enable Notifications</button>
+      </div>
+      <div class="bite-alerts-settings" id="biteAlertSettings">
+        <div class="bas-group">
+          <span class="bas-label">Show</span>
+          <button class="bas-chip active" data-threshold="65">Good+</button>
+          <button class="bas-chip" data-threshold="80">Prime only</button>
+          <button class="bas-chip" data-threshold="50">All</button>
+        </div>
+        <div class="bas-group">
+          <span class="bas-label">Sort</span>
+          <button class="bas-sort active" data-sort="day">By day</button>
+          <button class="bas-sort" data-sort="score">By score</button>
+        </div>
       </div>
       <div id="biteAlertsList"></div>
     </div>
@@ -3011,10 +3029,66 @@ async function fetchBiteAlerts(){
   return deduped;
 }
 
+// ---- Bite alert settings ----
+const ALERT_SETTINGS_KEY = 'fishhawker:alert-settings';
+let _alertSettings = (() => {
+  try { return JSON.parse(localStorage.getItem(ALERT_SETTINGS_KEY)) || {}; } catch(e){ return {}; }
+})();
+let _alertThreshold = _alertSettings.threshold ?? 65;
+let _alertSort      = _alertSettings.sort ?? 'day';
+
+function saveAlertSettings(){
+  try { localStorage.setItem(ALERT_SETTINGS_KEY, JSON.stringify({threshold:_alertThreshold, sort:_alertSort})); } catch(e){}
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Restore chip states
+  document.querySelectorAll('.bas-chip').forEach(b=>{
+    b.classList.toggle('active', Number(b.dataset.threshold)===_alertThreshold);
+    b.addEventListener('click',()=>{
+      _alertThreshold = Number(b.dataset.threshold);
+      document.querySelectorAll('.bas-chip').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      saveAlertSettings();
+      const cached = JSON.parse(localStorage.getItem(ALERT_CACHE_KEY)||'null');
+      if(cached) renderBiteAlerts(cached.alerts);
+    });
+  });
+  document.querySelectorAll('.bas-sort').forEach(b=>{
+    b.classList.toggle('active', b.dataset.sort===_alertSort);
+    b.addEventListener('click',()=>{
+      _alertSort = b.dataset.sort;
+      document.querySelectorAll('.bas-sort').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      saveAlertSettings();
+      const cached = JSON.parse(localStorage.getItem(ALERT_CACHE_KEY)||'null');
+      if(cached) renderBiteAlerts(cached.alerts);
+    });
+  });
+});
+
 function renderBiteAlerts(alerts){
   const section = document.getElementById('biteAlertsSection');
   const list    = document.getElementById('biteAlertsList');
   if(!alerts || !alerts.length){ section.style.display='none'; return; }
+
+  // Apply threshold filter
+  const filtered = alerts.filter(a => a.score >= _alertThreshold);
+
+  if(!filtered.length){
+    section.style.display = 'block';
+    list.innerHTML = `<div class="bite-alerts-loading" style="color:var(--mist-dim)">No alerts above score ${_alertThreshold} in the next 7 days.</div>`;
+    // Still show/hide notif button
+    const notifBtn = document.getElementById('notifPermBtn');
+    notifBtn.style.display = ('Notification' in window && Notification.permission==='default') ? 'inline-block' : 'none';
+    return;
+  }
+
+  // Apply sort
+  const sorted = [...filtered].sort(_alertSort === 'score'
+    ? (a,b) => b.score - a.score
+    : (a,b) => a.dayOffset - b.dayOffset || b.score - a.score
+  );
 
   section.style.display = 'block';
 
@@ -3026,7 +3100,7 @@ function renderBiteAlerts(alerts){
     notifBtn.style.display = 'none';
   }
 
-  list.innerHTML = alerts.map(a => `
+  list.innerHTML = sorted.map(a => `
     <div class="bite-alert-card ${a.label==='Prime'?'prime':a.label==='Good'?'good':''}" onclick="fishThisSpot('${esc(a.lake||a.spotName)}')">
       <div class="bite-alert-score-wrap">
         <div class="bite-alert-score ${a.label!=='Prime'?'good':''}">${a.score}</div>
@@ -3062,9 +3136,9 @@ async function loadAndRenderAlerts(){
   const alerts = await fetchBiteAlerts();
   renderBiteAlerts(alerts);
 
-  // Fire a browser notification once per session for Prime days within 3 days
+  // Fire a browser notification once per session for qualifying days within 3 days
   if('Notification' in window && Notification.permission === 'granted'){
-    const primeNear = alerts.find(a => a.label==='Prime' && a.dayOffset <= 3);
+    const primeNear = alerts.find(a => a.score >= _alertThreshold && a.dayOffset <= 3);
     if(primeNear && !sessionStorage.getItem('fh:notified')){
       sessionStorage.setItem('fh:notified','1');
       new Notification('🎣 Fish Hawker — Prime Bite Coming!', {
