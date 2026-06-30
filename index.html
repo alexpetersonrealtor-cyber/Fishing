@@ -166,6 +166,10 @@
   .spot-species{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;}
   .species-chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 7px;border-radius:5px;background:var(--moss-dim);color:var(--mist);}
   .spot-why{font-size:13px;color:var(--mist-dim);line-height:1.5;}
+  .spotSpecies-label{transition:opacity 0.2s;}
+  .spotSpecies-label.sp-unavailable{opacity:0.35;pointer-events:none;}
+  .spotSpecies-label.sp-unavailable input{cursor:not-allowed;}
+  #lakeSpeciesNote{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mist-dim);margin-top:6px;display:none;}
   .spot-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center;}
   .spot-card{cursor:pointer;}
   .spot-card .spot-actions button,.spot-card .spot-actions a{cursor:pointer;}
@@ -567,15 +571,16 @@
       <div class="form-row">
         <label>Target species</label>
         <div class="checkbox-row" style="flex-wrap:wrap;gap:10px;">
-          <label><input type="checkbox" class="spotSpecies" value="largemouth"> LM Bass</label>
-          <label><input type="checkbox" class="spotSpecies" value="smallmouth"> SM Bass</label>
-          <label><input type="checkbox" class="spotSpecies" value="walleye"> Walleye</label>
-          <label><input type="checkbox" class="spotSpecies" value="muskie"> Muskie</label>
-          <label><input type="checkbox" class="spotSpecies" value="steelhead"> Steelhead</label>
-          <label><input type="checkbox" class="spotSpecies" value="salmon"> Salmon</label>
-          <label><input type="checkbox" class="spotSpecies" value="trout"> Trout</label>
-          <label><input type="checkbox" class="spotSpecies" value="perch"> Perch</label>
+          <label class="spotSpecies-label" data-sp="largemouth"><input type="checkbox" class="spotSpecies" value="largemouth"> LM Bass</label>
+          <label class="spotSpecies-label" data-sp="smallmouth"><input type="checkbox" class="spotSpecies" value="smallmouth"> SM Bass</label>
+          <label class="spotSpecies-label" data-sp="walleye"><input type="checkbox" class="spotSpecies" value="walleye"> Walleye</label>
+          <label class="spotSpecies-label" data-sp="muskie"><input type="checkbox" class="spotSpecies" value="muskie"> Muskie</label>
+          <label class="spotSpecies-label" data-sp="steelhead"><input type="checkbox" class="spotSpecies" value="steelhead"> Steelhead</label>
+          <label class="spotSpecies-label" data-sp="salmon"><input type="checkbox" class="spotSpecies" value="salmon"> Salmon</label>
+          <label class="spotSpecies-label" data-sp="trout"><input type="checkbox" class="spotSpecies" value="trout"> Trout</label>
+          <label class="spotSpecies-label" data-sp="perch"><input type="checkbox" class="spotSpecies" value="perch"> Perch</label>
         </div>
+        <div id="lakeSpeciesNote"></div>
       </div>
 
       <div class="form-row">
@@ -3116,6 +3121,143 @@ document.getElementById('spotsFilter').addEventListener('click',e=>{
   renderSpotsList();
 });
 
+// ---- Illinois lake → species lookup (IL DNR survey data) ----
+// Keys are lowercase, stripped of "lake"/"river"/"reservoir" suffixes for flexible matching.
+// Species arrays use the same keys as WEIGHTS: largemouth, smallmouth, walleye, muskie,
+// steelhead, salmon, trout, perch.
+const IL_LAKE_SPECIES = {
+  // Fox Chain / Chain O' Lakes (Lake County)
+  'fox chain':           ['largemouth','walleye','muskie','perch'],
+  'chain o lakes':       ['largemouth','walleye','muskie','perch'],
+  'chain o\' lakes':     ['largemouth','walleye','muskie','perch'],
+  'fox lake':            ['largemouth','walleye','muskie','perch'],
+  'grass lake':          ['largemouth','perch'],
+  'lake catherine':      ['largemouth','muskie','walleye','perch'],
+  'lake marie':          ['largemouth','muskie','walleye'],
+  'pistakee lake':       ['largemouth','walleye','muskie','perch'],
+  'channel lake':        ['largemouth','muskie','perch'],
+  'petite lake':         ['largemouth','muskie'],
+  'cedar lake':          ['largemouth','walleye'],
+  'bluff lake':          ['largemouth'],
+  'long lake':           ['largemouth','perch'],
+  // Northern IL
+  'shabbona lake':       ['largemouth','smallmouth','walleye','muskie','perch'],
+  'lake le-aqua-na':     ['largemouth','smallmouth','walleye'],
+  'le-aqua-na':          ['largemouth','smallmouth','walleye'],
+  'lake le aqua na':     ['largemouth','smallmouth','walleye'],
+  'senachwine lake':     ['largemouth','walleye'],
+  'lake senachwine':     ['largemouth','walleye'],
+  'fox river':           ['largemouth','smallmouth','walleye','muskie'],
+  'des plaines river':   ['largemouth','smallmouth','walleye'],
+  'kankakee river':      ['largemouth','smallmouth','walleye'],
+  'rock river':          ['largemouth','smallmouth','walleye','muskie'],
+  'lake carroll':        ['largemouth','walleye','muskie'],
+  'carroll lake':        ['largemouth','walleye','muskie'],
+  'lake louise':         ['largemouth','walleye'],
+  'lake summerset':      ['largemouth','walleye'],
+  'lake bracken':        ['largemouth','walleye'],
+  'lake thunderbird':    ['largemouth','walleye'],
+  'lake vera':           ['largemouth'],
+  'lake storey':         ['largemouth','walleye'],
+  'rice lake':           ['largemouth','walleye','perch'],
+  // Lake Michigan (Chicago lakefront)
+  'lake michigan':       ['salmon','steelhead','trout','perch','walleye'],
+  'michigan':            ['salmon','steelhead','trout','perch','walleye'],
+  'chicago harbor':      ['salmon','steelhead','trout','perch'],
+  'waukegan harbor':     ['salmon','steelhead','perch'],
+  'north point marina':  ['salmon','steelhead','perch'],
+  'montrose harbor':     ['salmon','steelhead','trout','perch'],
+  'calumet harbor':      ['salmon','steelhead','perch'],
+  'chicago lakefront':   ['salmon','steelhead','trout','perch'],
+  // Central IL
+  'evergreen lake':      ['largemouth','walleye','muskie'],
+  'clinton lake':        ['largemouth','smallmouth','walleye'],
+  'lake decatur':        ['largemouth','walleye'],
+  'lake springfield':    ['largemouth','walleye'],
+  'sangchris lake':      ['largemouth','walleye'],
+  'lake shelbyville':    ['largemouth','walleye','perch'],
+  'shelbyville':         ['largemouth','walleye','perch'],
+  'lake mattoon':        ['largemouth','walleye'],
+  'coffeen lake':        ['largemouth','walleye'],
+  'lake lou yaeger':     ['largemouth','walleye','muskie'],
+  'lou yaeger':          ['largemouth','walleye','muskie'],
+  'lake taylorville':    ['largemouth','walleye'],
+  'taylorville lake':    ['largemouth','walleye'],
+  'banner marsh':        ['largemouth','walleye','perch'],
+  'lake bloomington':    ['largemouth','walleye'],
+  'snakeden hollow':     ['largemouth','walleye'],
+  'lake carlyle':        ['largemouth','walleye','perch'],
+  'carlyle lake':        ['largemouth','walleye','perch'],
+  'illinois river':      ['largemouth','walleye','smallmouth'],
+  'spoon river':         ['largemouth','smallmouth'],
+  // Southern IL
+  'rend lake':           ['largemouth','walleye','muskie','perch'],
+  'kinkaid lake':        ['largemouth','walleye','muskie'],
+  'crab orchard lake':   ['largemouth','walleye','muskie'],
+  'lake of egypt':       ['largemouth','walleye','trout'],
+  "devil's kitchen":     ['largemouth','walleye','trout'],
+  'devil\'s kitchen':    ['largemouth','walleye','trout'],
+  'little grassy lake':  ['largemouth','walleye','trout'],
+  'horseshoe lake':      ['largemouth'],
+  'newton lake':         ['largemouth','walleye','muskie','trout'],
+  'lake newton':         ['largemouth','walleye','muskie','trout'],
+  'lake murdock':        ['largemouth','walleye'],
+  'sam dale lake':       ['largemouth','walleye'],
+  'sam parr lake':       ['largemouth','walleye'],
+  'stephen forbes':      ['largemouth','walleye'],
+  'lake stephen forbes': ['largemouth','walleye'],
+  'red hills lake':      ['largemouth','walleye'],
+  'wabash river':        ['largemouth','smallmouth','walleye'],
+};
+
+// Normalize a lake name for lookup — lowercase, trim, collapse spaces
+function normalizeLakeName(name){
+  return name.toLowerCase()
+    .replace(/\blake\b\s*$/,'').replace(/^\s*\blake\b\s*/,'')
+    .replace(/\breservoir\b/,'').replace(/\blakes\b/,'lake')
+    .replace(/\s+/g,' ').trim();
+}
+
+function lookupLakeSpecies(name){
+  if(!name) return null;
+  const n = normalizeLakeName(name);
+  // direct match
+  if(IL_LAKE_SPECIES[n]) return IL_LAKE_SPECIES[n];
+  // also try with "lake" prepended / appended
+  if(IL_LAKE_SPECIES['lake '+n]) return IL_LAKE_SPECIES['lake '+n];
+  if(IL_LAKE_SPECIES[n+' lake']) return IL_LAKE_SPECIES[n+' lake'];
+  // partial: check if any key starts with n or n starts with a key
+  for(const k of Object.keys(IL_LAKE_SPECIES)){
+    if(k.includes(n) || n.includes(k)) return IL_LAKE_SPECIES[k];
+  }
+  return null;
+}
+
+function applyLakeSpeciesFilter(lakeName){
+  const known = lookupLakeSpecies(lakeName);
+  const note = document.getElementById('lakeSpeciesNote');
+  document.querySelectorAll('.spotSpecies-label').forEach(lbl=>{
+    const sp = lbl.dataset.sp;
+    const cb = lbl.querySelector('input');
+    if(known){
+      const available = known.includes(sp);
+      lbl.classList.toggle('sp-unavailable', !available);
+      if(!available) cb.checked = false;
+    } else {
+      lbl.classList.remove('sp-unavailable');
+    }
+  });
+  if(known && lakeName.trim()){
+    note.style.display='block';
+    note.textContent=`ℹ Species filtered by IL DNR survey data for ${lakeName.trim()}.`;
+  } else {
+    note.style.display='none';
+    note.textContent='';
+  }
+}
+
+document.getElementById('spotLake').addEventListener('input', e => applyLakeSpeciesFilter(e.target.value));
+
 function resetSpotForm(){
   ['spotName','spotLake','spotLat','spotLon','spotNotes'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.spotSpecies').forEach(c=>c.checked=false);
@@ -3125,6 +3267,7 @@ function resetSpotForm(){
   document.getElementById('spotFormTitle').textContent='Add a Spot';
   document.getElementById('cancelSpotBtn').style.display='none';
   document.getElementById('spotFormStatus').textContent='';
+  applyLakeSpeciesFilter('');
 }
 document.getElementById('cancelSpotBtn').addEventListener('click',resetSpotForm);
 
@@ -3155,6 +3298,7 @@ function editSpot(id){
   document.getElementById('spotLake').value=spot.lake||'';
   document.getElementById('spotLat').value=spot.lat||'';
   document.getElementById('spotLon').value=spot.lon||'';
+  applyLakeSpeciesFilter(spot.lake||'');
   document.querySelectorAll('.spotSpecies').forEach(c=>{ c.checked=(spot.species||[]).includes(c.value); });
   selectedStructures=(spot.structure||'').split(',').map(s=>s.trim()).filter(Boolean);
   document.querySelectorAll('.struct-btn').forEach(b=>b.classList.toggle('active',selectedStructures.includes(b.dataset.struct)));
