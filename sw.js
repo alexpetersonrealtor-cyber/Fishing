@@ -1,7 +1,7 @@
-const CACHE = 'fishhawker-v19';
+const CACHE = 'fishhawker-v20';
 const PRECACHE = [
-  '/',
-  '/index.html',
+  '/Fishing/',
+  '/Fishing/index.html',
   'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap'
 ];
 
