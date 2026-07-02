@@ -456,6 +456,11 @@
         </div>
       </div>
       <div class="meter-why" id="scoreWhy"></div>
+      <div id="foragePanel" style="display:none;margin-top:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.55;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:var(--amber);text-transform:uppercase;margin-bottom:4px;">🪱 Primary Forage</div>
+        <div id="forageText" style="color:var(--mist);"></div>
+        <div id="foragePresText" style="color:var(--mist-dim);font-size:12px;margin-top:4px;"></div>
+      </div>
     </div>
 
     <div id="conditionSpotsPanel" style="display:none;">
@@ -2695,6 +2700,155 @@ function renderDepthTarget(ctx){
   </div>`;
 }
 
+// ============================================================
+//  FORAGE LOOKUP & LURE TIPS
+// ============================================================
+// Primary forage keyed by normalized lake name (same normalization as IL_LAKE_SPECIES).
+// Values: { forage: string[], notes: string }
+// forage options: 'shad','bluegill','crawfish','perch','shiners','alewife','frogs','insects'
+const IL_LAKE_FORAGE = {
+  // Fox Chain / Chain O' Lakes
+  'fox chain':          {forage:['bluegill','perch','shiners'],   notes:'Dense weed growth supports large bluegill population year-round.'},
+  'chain o lakes':      {forage:['bluegill','perch','shiners'],   notes:'Dense weed growth supports large bluegill population year-round.'},
+  'chain o\' lakes':    {forage:['bluegill','perch','shiners'],   notes:'Dense weed growth supports large bluegill population year-round.'},
+  'fox lake':           {forage:['bluegill','perch','shiners'],   notes:'Heavy panfish population; perch schools draw bass in fall.'},
+  'grass lake':         {forage:['bluegill','frogs'],             notes:'Shallow weedy lake — frog and bluegill forage dominate.'},
+  'lake catherine':     {forage:['bluegill','shiners'],           notes:'Clear water; match small natural presentations.'},
+  'lake marie':         {forage:['bluegill','shiners'],           notes:'Connected to Fox Chain; similar bluegill-heavy forage base.'},
+  'pistakee lake':      {forage:['bluegill','perch'],             notes:'Productive panfish lake; bass key on perch in open water.'},
+  'channel lake':       {forage:['bluegill','shiners'],           notes:'Weedy shallows; bluegill and shiners near vegetation.'},
+  'petite lake':        {forage:['bluegill','crawfish'],          notes:'Rocky shorelines hold good crawfish populations.'},
+  'cedar lake':         {forage:['bluegill','frogs'],             notes:'Heavy shoreline vegetation; frog bite can be excellent summer.'},
+  // Northern IL
+  'shabbona lake':      {forage:['shad','bluegill','crawfish'],   notes:'Gizzard shad introduced; bass suspend over shad schools mid-lake.'},
+  'lake le-aqua-na':    {forage:['bluegill','crawfish'],          notes:'Rocky structure supports strong crawfish population.'},
+  'le-aqua-na':         {forage:['bluegill','crawfish'],          notes:'Rocky structure supports strong crawfish population.'},
+  'lake le aqua na':    {forage:['bluegill','crawfish'],          notes:'Rocky structure supports strong crawfish population.'},
+  'lake carroll':       {forage:['shad','bluegill'],              notes:'Shad present in deeper basin; bluegill dominant in shallows.'},
+  'carroll lake':       {forage:['shad','bluegill'],              notes:'Shad present in deeper basin; bluegill dominant in shallows.'},
+  'lake storey':        {forage:['bluegill','shad'],              notes:'Mixed forage — shad in open water, bluegill near structure.'},
+  'lake summerset':     {forage:['bluegill','crawfish'],          notes:'Smallmouth and largemouth share rocky crawfish-heavy habitat.'},
+  'fox river':          {forage:['crawfish','shiners','shad'],    notes:'Current-oriented forage; crawfish dominant on rocky reaches.'},
+  'rock river':         {forage:['crawfish','shiners'],           notes:'Strong crawfish base on rocky river substrate.'},
+  'des plaines river':  {forage:['shiners','crawfish'],           notes:'Minnow-heavy river system; crawfish in rocky shallows.'},
+  // Central IL
+  'evergreen lake':     {forage:['shad','bluegill'],              notes:'Gizzard shad dominant open-water forage; bass school on shad mid-lake.'},
+  'clinton lake':       {forage:['shad','bluegill','crawfish'],   notes:'Warm-water discharge draws shad; bass stack behind shad schools in fall.'},
+  'lake decatur':       {forage:['shad','bluegill'],              notes:'Heavily shad-dominated; topwater shad imitations fire in fall.'},
+  'lake springfield':   {forage:['shad','bluegill'],              notes:'Gizzard shad are primary open-water forage.'},
+  'sangchris lake':     {forage:['shad','bluegill'],              notes:'Warm discharge lake; shad congregation attracts large largemouth.'},
+  'lake shelbyville':   {forage:['shad','bluegill','crawfish'],   notes:'Classic shad-dominated reservoir; match-the-hatch in fall.'},
+  'shelbyville':        {forage:['shad','bluegill','crawfish'],   notes:'Classic shad-dominated reservoir; match-the-hatch in fall.'},
+  'carlyle lake':       {forage:['shad','crawfish'],              notes:'Largest lake in IL; gizzard shad are primary forage for all bass.'},
+  'lake carlyle':       {forage:['shad','crawfish'],              notes:'Largest lake in IL; gizzard shad are primary forage for all bass.'},
+  'coffeen lake':       {forage:['shad','bluegill'],              notes:'Shad-dominated warm-water lake.'},
+  'lake lou yaeger':    {forage:['shad','bluegill'],              notes:'Shad schools concentrate bass in spring and fall.'},
+  'lou yaeger':         {forage:['shad','bluegill'],              notes:'Shad schools concentrate bass in spring and fall.'},
+  'lake mattoon':       {forage:['shad','bluegill'],              notes:'Shad present; bass follow baitfish schools in open water.'},
+  'lake bloomington':   {forage:['shad','bluegill'],              notes:'Reservoir with gizzard shad as primary open-water forage.'},
+  'banner marsh':       {forage:['bluegill','frogs','crawfish'],  notes:'Restored wetland; excellent frog bite late spring through summer.'},
+  // Southern IL
+  'rend lake':          {forage:['shad','bluegill','crawfish'],   notes:'Major shad fishery; bass follow shad schools to main lake points in fall.'},
+  'kinkaid lake':       {forage:['shad','bluegill'],              notes:'Shad-heavy reservoir in Shawnee hills; bass suspend on shad mid-depth.'},
+  'crab orchard lake':  {forage:['shad','bluegill','crawfish'],   notes:'Diverse forage base; shad in open water, crawfish on rocky banks.'},
+  'lake of egypt':      {forage:['shad','bluegill'],              notes:'Southern IL bass fishery; shad dominant forage year-round.'},
+  "devil's kitchen":    {forage:['bluegill','crawfish','shiners'],notes:'Clear, deep lake; bass key on bluegill along steep banks.'},
+  'little grassy lake': {forage:['bluegill','crawfish'],          notes:'Clear highland reservoir; finesse presentations often outperform.'},
+  'horseshoe lake':     {forage:['bluegill','frogs','crawfish'],  notes:'Shallow oxbow lake; heavy frog and crawfish forage.'},
+  'newton lake':        {forage:['shad','bluegill'],              notes:'Warm-water discharge; shad stack near outflow in cold months.'},
+  'sam dale lake':      {forage:['bluegill','crawfish'],          notes:'Small SE Illinois lake; panfish-heavy forage base.'},
+  'sam parr lake':      {forage:['bluegill','crawfish'],          notes:'Clear water; crawfish imitations work well on rock structure.'},
+};
+
+const FORAGE_LURE = {
+  shad: {
+    cold:  'Slow-roll a shad-colored swimbait or suspend a jerkbait (white/chrome). Let it sit on pauses.',
+    cool:  'Lipless crankbait (rattle trap) in chrome or shad over points and channel edges. Yo-yo retrieve.',
+    warm:  'Topwater walking bait at dawn/dusk over schools. Swimbait under birds when shad busting.',
+    hot:   'Deep-diving shad crankbait (10–16 ft) or drop-shot with shad-colored worm on main lake structure.',
+  },
+  bluegill: {
+    cold:  'Small finesse jig (1/4 oz, green pumpkin) on a slow drag. Ned rig near panfish spawning areas.',
+    cool:  'Swimbait (bluegill pattern) or swim jig with bluegill trailer along weed edges and docks.',
+    warm:  'Hollow-body frog over pads, or bluegill-colored popper near shallow cover at first light.',
+    hot:   'Swim jig with paddle tail under docks and shaded structure. Topwater at low light only.',
+  },
+  crawfish: {
+    cold:  'Football jig (brown/orange) dragged slowly on rocky bottom. Finesse shaky head works too.',
+    cool:  'Jig-n-pig or creature bait (green pumpkin/brown) on rocky points and riprap. Slow pitch.',
+    warm:  'Flipping jig into rock piles and wood. Squarebill crankbait in crawfish colors on riprap.',
+    hot:   'Deep football jig (3/4 oz) on main lake rock structure. Carolina rig with creature bait.',
+  },
+  perch: {
+    cold:  'Suspending jerkbait in perch color (chartreuse/orange). Pause 3–5 seconds between twitches.',
+    cool:  'Swimbait or fluke in perch pattern. Work just above weed tops where perch schools hold.',
+    warm:  'Topwater over open-water perch schools, or swim jig along weed edges at dawn.',
+    hot:   'Umbrella rig or large swimbait in perch color suspended over deep basin edges.',
+  },
+  shiners: {
+    cold:  'Suspending jerkbait (natural shiner) or slow-rolling a small swimbait. Pause is key.',
+    cool:  'Fluke or paddle tail (white/silver) on a steady retrieve through open water.',
+    warm:  'Walk-the-dog topwater or fluke over shallow flats at first and last light.',
+    hot:   'Deep swimbait or drop-shot with shiner-colored finesse worm on main channel edges.',
+  },
+  frogs: {
+    cold:  'Soft-plastic craw or creature bait near vegetation edges — frogs are dormant.',
+    cool:  'Buzz frog or popping frog near emerging vegetation. Early-morning topwater.',
+    warm:  'Hollow-body frog over thick pads and mats. Walk it slow — let it sit on openings.',
+    hot:   'Frog in early morning and late evening over mats. Switch to flipping jig under mats midday.',
+  },
+  alewife: {
+    cold:  'Jerkbait (alewife pattern, blue/silver) on a slow pause-heavy retrieve.',
+    cool:  'Swimbait or jigging spoon near deep structure where alewife school.',
+    warm:  'Topwater popper over alewife schools at dawn. Swimbait on steep breaks.',
+    hot:   'Deep jigging spoon on main lake structure. Match the size of the schooling bait.',
+  },
+  insects: {
+    cold:  'Small soft plastic (2" worm or ned rig) on light line — insect activity is minimal.',
+    cool:  'Small topwater popper or buzzbait in early morning when insects hatch near shore.',
+    warm:  'Popper or small floating insect imitation near overhanging trees and weed edges.',
+    hot:   'Early morning only — small popper or skipping a wacky rig under docks.',
+  },
+};
+
+function getTempBand(tempF){
+  if(tempF < 50) return 'cold';
+  if(tempF < 62) return 'cool';
+  if(tempF < 75) return 'warm';
+  return 'hot';
+}
+
+function getForageForLake(lakeName){
+  if(!lakeName) return null;
+  const n = normalizeLakeName(lakeName);
+  if(IL_LAKE_FORAGE[n]) return IL_LAKE_FORAGE[n];
+  if(IL_LAKE_FORAGE['lake '+n]) return IL_LAKE_FORAGE['lake '+n];
+  if(IL_LAKE_FORAGE[n+' lake']) return IL_LAKE_FORAGE[n+' lake'];
+  for(const k of Object.keys(IL_LAKE_FORAGE)){
+    if(k.includes(n) || n.includes(k)) return IL_LAKE_FORAGE[k];
+  }
+  return null;
+}
+
+function renderForagePanel(lakeName, waterTempF, sp){
+  const panel = document.getElementById('foragePanel');
+  const isBass = sp === 'largemouth' || sp === 'smallmouth';
+  if(!isBass){ panel.style.display='none'; return; }
+
+  const data = getForageForLake(lakeName);
+  if(!data){ panel.style.display='none'; return; }
+
+  const band = getTempBand(waterTempF);
+  // Pick primary forage for lure tip (first in list)
+  const primary = data.forage[0];
+  const lure = FORAGE_LURE[primary]?.[band] || '';
+  const forageNames = data.forage.map(f=>f.charAt(0).toUpperCase()+f.slice(1)).join(', ');
+
+  document.getElementById('forageText').textContent = `${forageNames} — ${data.notes}`;
+  document.getElementById('foragePresText').textContent = lure ? `🎣 ${lure}` : '';
+  panel.style.display = 'block';
+}
+
 function renderScore(){
   const {factors, weatherCtx, total: preTotal, seasonNote}=buildFactors();
   const total = preTotal ?? Math.round(factors.reduce((s,f)=>s+f.score*f.weight,0));
@@ -2741,6 +2895,10 @@ function renderScore(){
   renderConditionSpots(weatherCtx, total);
   renderStructureGuide(weatherCtx);
   renderDepthTarget(weatherCtx);
+
+  // Forage panel (bass only)
+  const { waterTemp: wt2 } = weatherCtx;
+  renderForagePanel(document.getElementById('locInput').value, wt2, state.species);
 
   // Trigger buoy load if boat mode is active for a known large lake
   const lake = detectLake(document.getElementById('locInput').value);
